@@ -38,6 +38,7 @@
     }
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.0.0",
     "sherpa-onnx-node": "^1.13.8"
   },
   "devDependencies": {

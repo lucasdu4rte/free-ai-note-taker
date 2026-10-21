@@ -19,6 +19,7 @@ Cada reunião vira uma pasta em `Documentos\Free AI Note Taker\<data hora>\` com
 | Transcrição | Google Gemini | Plano grátis |
 | Transcrição | OpenAI (`gpt-4o-mini-transcribe`) ou qualquer API compatível | Pago |
 | Revisão e resumo | Google Gemini | Plano grátis (recomendado) |
+| Revisão e resumo | Anthropic Claude Haiku 5.5 (`claude-haiku-5-5`) | US$ 0,10 / 0,50 por milhão de tokens de entrada/saída: centavos por reunião |
 | Revisão e resumo | Ollama (local) | Grátis, offline |
 | Revisão e resumo | Groq, OpenAI ou qualquer API compatível com OpenAI | Groq tem plano grátis com limite baixo |
 

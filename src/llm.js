@@ -1,3 +1,5 @@
+import { completeWithClaude } from './anthropic.js'
+
 const CLEANUP_PROMPT = `Você recebe um trecho de transcrição automática de uma reunião, com marcações de tempo [mm:ss].
 Corrija pontuação, maiúsculas, palavras reconhecidas errado (pelo contexto) e remova vícios de linguagem e repetições.
 Não resuma, não acrescente nada e não mude o sentido. Mantenha as marcações de tempo e o idioma original.
@@ -27,13 +29,18 @@ export async function cleanTranscript(transcript, config, onStatus) {
   const cleaned = []
   for (const [i, block] of blocks.entries()) {
     onStatus(`Revisando o texto ${i + 1}/${blocks.length}`)
-    cleaned.push(await chat(config, [{ role: 'system', content: CLEANUP_PROMPT }, { role: 'user', content: block }]))
+    cleaned.push(await complete(config, CLEANUP_PROMPT, block))
   }
   return cleaned.join('\n')
 }
 
 export function summarize(transcript, config) {
-  return chat(config, [{ role: 'system', content: SUMMARY_PROMPT }, { role: 'user', content: transcript }])
+  return complete(config, SUMMARY_PROMPT, transcript)
+}
+
+function complete(config, system, text) {
+  if (config.provider === 'anthropic') return completeWithClaude(config, system, text)
+  return chat(config, [{ role: 'system', content: system }, { role: 'user', content: text }])
 }
 
 export function splitIntoBlocks(text, maxChars) {

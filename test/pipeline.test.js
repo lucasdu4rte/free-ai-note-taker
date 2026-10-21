@@ -8,7 +8,7 @@ import sherpa from 'sherpa-onnx-node'
 import { LOCAL_ASR_MODELS, ensureModels } from '../src/models.js'
 import { FILES, formatTime, processMeeting } from '../src/pipeline.js'
 import { groupSegments, speechSegments, transcribeLocal } from '../src/transcribe.js'
-import { postJson, splitIntoBlocks } from '../src/llm.js'
+import { postJson, splitIntoBlocks, summarize } from '../src/llm.js'
 import { encodeWav, repairWavHeader, wavHeader } from '../src/wav.js'
 
 const FIXTURE = path.join(import.meta.dirname, 'fixtures', 'fala.wav')
@@ -83,7 +83,50 @@ test('a meeting goes from audio to transcript and summary with cloud providers',
   server.close()
 })
 
-const hasLocalModel = fs.existsSync(path.join(MODELS_DIR, 'encoder.int8.onnx'))
+test('summaries can be written by Claude through the Anthropic API', async () => {
+  let request
+  const server = await fakeApi(async (req, res) => {
+    request = { url: req.url, headers: req.headers, body: JSON.parse(await readBody(req)) }
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify(claudeMessage([{ type: 'thinking', thinking: '', signature: 's' }, { type: 'text', text: '## Resumo\nOk.' }])))
+  })
+  const config = { provider: 'anthropic', baseURL: server.url, apiKey: 'sk-ant-test', model: 'claude-haiku-5-5' }
+
+  assert.equal(await summarize('[00:01] bom dia', config), '## Resumo\nOk.')
+
+  assert.equal(request.url, '/v1/messages')
+  assert.ok([request.headers.authorization, request.headers['x-api-key']].some((h) => h?.includes('sk-ant-test')))
+  assert.ok(request.headers['anthropic-version'])
+  assert.equal(request.body.model, 'claude-haiku-5-5')
+  assert.match(request.body.system, /atas de reunião/)
+  assert.deepEqual(request.body.messages, [{ role: 'user', content: '[00:01] bom dia' }])
+  server.close()
+})
+
+test('a Claude refusal is reported instead of saved as a summary', async () => {
+  const server = await fakeApi((_req, res) => {
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify({ ...claudeMessage([]), stop_reason: 'refusal', stop_details: { type: 'refusal', category: 'cyber' } }))
+  })
+  const config = { provider: 'anthropic', baseURL: server.url, apiKey: 'k', model: 'claude-haiku-5-5' }
+
+  await assert.rejects(summarize('texto', config), /recusou.*cyber/)
+  server.close()
+})
+
+function claudeMessage(content) {
+  return {
+    id: 'msg_1',
+    type: 'message',
+    role: 'assistant',
+    model: 'claude-haiku-5-5',
+    content,
+    stop_reason: 'end_turn',
+    usage: { input_tokens: 10, output_tokens: 5 },
+  }
+}
+
+const hasLocalModel =fs.existsSync(path.join(MODELS_DIR, 'encoder.int8.onnx'))
 
 test('the local NVIDIA Parakeet model transcribes Portuguese', { skip: !hasLocalModel && 'set MODELS_DIR' }, async () => {
   const models = await ensureModels(MODELS_DIR, LOCAL_ASR_MODELS)

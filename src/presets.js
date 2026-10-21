@@ -13,6 +13,7 @@ export const TRANSCRIPTION_PRESETS = {
 
 export const LLM_PRESETS = {
   gemini: { label: 'Google Gemini (plano grátis)', baseURL: GEMINI_URL, model: 'gemini-3.8-flash' },
+  anthropic: { label: 'Anthropic: Claude Haiku 5.5 (barato)', baseURL: 'https://api.anthropic.com', model: 'claude-haiku-5-5' },
   ollama: { label: 'Ollama (local, grátis)', baseURL: 'http://localhost:11434/v1', model: 'gemma3:4b' },
   groq: { label: 'Groq (plano grátis, limite baixo)', baseURL: GROQ_URL, model: 'openai/gpt-oss-120b' },
   openai: { label: 'OpenAI', baseURL: OPENAI_URL, model: 'gpt-5.4-mini' },
