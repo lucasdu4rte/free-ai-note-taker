@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>Free AI Note Taker</title>
+    <style>
+      :root {
+        --bg: #f6f6f4;
+        --panel: #ffffff;
+        --text: #1d1d1b;
+        --muted: #6b6b66;
+        --border: #e2e2dc;
+        --accent: #3557d4;
+        --record: #d93a2b;
+        color-scheme: light dark;
+        font: 14px/1.5 'Segoe UI', system-ui, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #19191a;
+          --panel: #232325;
+          --text: #ececea;
+          --muted: #9a9a95;
+          --border: #343437;
+          --accent: #7d95f0;
+        }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--text); }
+      header, .recorder { display: flex; align-items: center; gap: 12px; padding: 12px 20px; }
+      header { justify-content: space-between; border-bottom: 1px solid var(--border); }
+      h1 { font-size: 16px; margin: 0; }
+      h2 { font-size: 16px; margin: 0; }
+      h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+      button, select, input { font: inherit; color: inherit; }
+      button { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); cursor: pointer; }
+      button:hover { border-color: var(--accent); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .record { padding: 10px 18px; border: 0; background: var(--record); color: #fff; font-weight: 600; }
+      .record.on { background: var(--text); color: var(--bg); }
+      #timer { font-variant-numeric: tabular-nums; font-weight: 600; }
+      .muted { color: var(--muted); }
+      .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 230px 1fr; border-top: 1px solid var(--border); }
+      nav { overflow: auto; border-right: 1px solid var(--border); }
+      nav ul { list-style: none; margin: 0; padding: 8px; }
+      nav button { width: 100%; text-align: left; border: 0; background: none; }
+      nav button[aria-current='true'] { background: var(--panel); outline: 1px solid var(--border); }
+      article { overflow: auto; padding: 16px 24px; }
+      .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+      .toolbar h2 { margin-right: auto; }
+      #meeting-status { width: 100%; }
+      .text { white-space: pre-wrap; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+      details { margin-top: 16px; }
+      summary { cursor: pointer; color: var(--muted); }
+      dialog { width: min(560px, 92vw); border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text); }
+      fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0 0 12px; display: grid; gap: 8px; }
+      label { display: grid; gap: 2px; color: var(--muted); }
+      label > * { color: var(--text); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+      [hidden] { display: none !important; }
+      menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; margin: 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Free AI Note Taker</h1>
+      <button id="open-settings">Configurações</button>
+    </header>
+
+    <section class="recorder">
+      <button id="record" class="record">Gravar reunião</button>
+      <span id="timer"></span>
+      <span id="record-hint" class="muted"></span>
+    </section>
+
+    <div class="layout">
+      <nav><ul id="meetings"></ul></nav>
+      <article id="meeting" hidden>
+        <div class="toolbar">
+          <h2 id="meeting-title"></h2>
+          <button id="copy-summary">Copiar resumo</button>
+          <button id="process">Processar</button>
+          <button id="open-folder">Abrir pasta</button>
+          <span id="meeting-status" class="muted"></span>
+        </div>
+        <h3>Resumo</h3>
+        <div id="summary" class="text"></div>
+        <details>
+          <summary>Transcrição</summary>
+          <div id="transcript" class="text"></div>
+        </details>
+      </article>
+    </div>
+
+    <dialog id="settings">
+      <form method="dialog">
+        <fieldset data-section="transcription">
+          <legend>Transcrição</legend>
+          <label>Serviço <select name="transcription.provider"></select></label>
+          <div class="cloud">
+            <label>Chave de API <input type="password" name="transcription.apiKey" autocomplete="off" /></label>
+            <label>Modelo <input name="transcription.model" /></label>
+            <label>URL base <input name="transcription.baseURL" /></label>
+          </div>
+          <input type="hidden" name="transcription.mode" />
+        </fieldset>
+        <fieldset data-section="llm">
+          <legend>Revisão do texto e resumo</legend>
+          <label>Serviço <select name="llm.provider"></select></label>
+          <label>Chave de API <input type="password" name="llm.apiKey" autocomplete="off" placeholder="Não precisa para o Ollama" /></label>
+          <label>Modelo <input name="llm.model" /></label>
+          <label>URL base <input name="llm.baseURL" /></label>
+        </fieldset>
+        <menu>
+          <button value="cancel" formnovalidate>Cancelar</button>
+          <button value="save">Salvar</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script type="module" src="renderer.js"></script>
+  </body>
+</html>
