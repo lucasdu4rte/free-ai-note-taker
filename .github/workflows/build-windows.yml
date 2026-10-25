@@ -5,6 +5,9 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -21,3 +24,8 @@ jobs:
         with:
           name: free-ai-note-taker-windows
           path: dist/*.exe
+      - if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: gh release create "$GITHUB_REF_NAME" dist/*.exe --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
