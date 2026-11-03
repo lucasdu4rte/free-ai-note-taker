@@ -1,15 +1,32 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+const on = (channel) => (callback) => ipcRenderer.on(channel, (_event, ...args) => callback(...args))
+
 contextBridge.exposeInMainWorld('api', {
   platform: process.platform,
+  shortcut: () => ipcRenderer.invoke('app:shortcut'),
   startRecording: () => ipcRenderer.invoke('recording:start'),
   sendAudio: (samples) => ipcRenderer.send('recording:chunk', samples),
+  sendLevel: (level) => ipcRenderer.send('recording:level', level),
   stopRecording: () => ipcRenderer.invoke('recording:stop'),
   processMeeting: (id) => ipcRenderer.invoke('meeting:process', id),
   listMeetings: () => ipcRenderer.invoke('meetings:list'),
   readMeeting: (id) => ipcRenderer.invoke('meeting:read', id),
+  toggleTask: (id, index, done) => ipcRenderer.invoke('meeting:toggle-task', id, index, done),
   openMeeting: (id) => ipcRenderer.invoke('meeting:open', id),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
-  onStatus: (callback) => ipcRenderer.on('status', (_event, id, status) => callback(id, status)),
+  onStatus: on('status'),
+  onToggleRecording: on('recording:toggle'),
+  onShowMeeting: on('meeting:show'),
+  onShowSettings: on('settings:show'),
+
+  overlay: {
+    getState: () => ipcRenderer.invoke('overlay:get-state'),
+    onState: on('overlay:state'),
+    onLevel: on('overlay:level'),
+    stop: () => ipcRenderer.send('overlay:stop'),
+    openMeeting: (id) => ipcRenderer.send('overlay:open-meeting', id),
+    openSettings: () => ipcRenderer.send('overlay:open-settings'),
+  },
 })

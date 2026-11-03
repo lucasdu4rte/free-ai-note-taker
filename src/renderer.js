@@ -1,18 +1,26 @@
 import { LLM_PRESETS, TRANSCRIPTION_PRESETS, fromPreset } from './presets.js'
+import { parseSummary, parseTranscript } from './notes.js'
 
 const { api } = window
 const $ = (selector) => document.querySelector(selector)
 const PRESETS = { transcription: TRANSCRIPTION_PRESETS, llm: LLM_PRESETS }
 const FIELDS = ['provider', 'apiKey', 'model', 'baseURL', 'mode']
-const form = $('#settings form')
+const form = $('#settings-form')
 const statuses = new Map()
+let meetings = []
 let selectedId
+let summaryText
+let tab = 'summary'
 let recording
+let toggling = false
 
 const captureSystemAudio = api.platform === 'win32'
-$('#record-hint').textContent = captureSystemAudio
-  ? 'Grava o microfone e o som do computador (Teams, Meet, Zoom).'
-  : 'Neste sistema, por enquanto, só o microfone é gravado.'
+
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props)
+  node.append(...children.filter((child) => child !== undefined))
+  return node
+}
 
 async function startRecording() {
   const context = new AudioContext({ sampleRate: 16000 })
@@ -34,8 +42,17 @@ async function startRecording() {
   for (const stream of streams) context.createMediaStreamSource(stream).connect(recorder)
   recorder.connect(context.destination)
   const id = await api.startRecording()
-  recorder.port.onmessage = (event) => api.sendAudio(event.data)
-  return { id, context, streams, startedAt: Date.now() }
+  recorder.port.onmessage = (event) => {
+    api.sendAudio(event.data)
+    api.sendLevel(level(event.data))
+  }
+  return { id, context, streams }
+}
+
+function level(samples) {
+  let sum = 0
+  for (const sample of samples) sum += sample * sample
+  return Math.min(1, Math.sqrt(sum / samples.length) * 4)
 }
 
 function releaseAudio(context, streams) {
@@ -44,38 +61,28 @@ function releaseAudio(context, streams) {
 }
 
 async function toggleRecording() {
-  const button = $('#record')
-  button.disabled = true
+  if (toggling) return
+  toggling = true
   try {
     if (!recording) {
       recording = await startRecording()
-      recording.timer = setInterval(showElapsed, 1000)
-      showElapsed()
-      button.textContent = 'Parar e gerar resumo'
-      button.classList.add('on')
+      renderRecordState()
       return
     }
-    const { context, streams, timer } = recording
+    const { context, streams } = recording
     recording = undefined
-    clearInterval(timer)
-    $('#timer').textContent = ''
-    button.textContent = 'Gravar reunião'
-    button.classList.remove('on')
+    renderRecordState()
     await releaseAudio(context, streams)
     const id = await api.stopRecording()
+    showView('meetings')
     await refreshList()
     await showMeeting(id)
     processMeeting(id)
   } catch (error) {
     alert(`Não foi possível gravar: ${error.message}`)
   } finally {
-    button.disabled = false
+    toggling = false
   }
-}
-
-function showElapsed() {
-  const seconds = Math.floor((Date.now() - recording.startedAt) / 1000)
-  $('#timer').textContent = new Date(seconds * 1000).toISOString().slice(11, 19)
 }
 
 async function processMeeting(id) {
@@ -86,86 +93,252 @@ async function processMeeting(id) {
   } catch (error) {
     setStatus(id, `Erro: ${error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`)
   }
+  await refreshList()
   if (id === selectedId) await showMeeting(id)
-}
-
-function setStatus(id, status) {
-  statuses.set(id, status)
-  if (id === selectedId) $('#meeting-status').textContent = status
-  $('#process').disabled = isProcessing(selectedId)
 }
 
 const isProcessing = (id) => Boolean(statuses.get(id)) && !statuses.get(id).startsWith('Erro')
 
+function setStatus(id, status) {
+  statuses.set(id, status)
+  if (id === selectedId) renderMeetingStatus()
+  renderRecordState()
+  renderList()
+}
+
+function appState() {
+  if (recording) return { label: 'Gravando', dot: 'rec' }
+  if ([...statuses.keys()].some(isProcessing)) return { label: 'Processando', dot: 'busy' }
+  return { label: 'Pronto', dot: 'ok' }
+}
+
+function renderRecordState() {
+  const state = appState()
+  $('#record').classList.toggle('on', Boolean(recording))
+  $('#record-label').textContent = recording ? 'Parar' : 'Gravar'
+  $('#state').textContent = state.label
+  $('#state-dot').className = `dot ${state.dot}`
+}
+
+function formatWhen(id) {
+  const [date, time] = id.split(' ')
+  const day = new Date(`${date}T00:00:00`)
+  const today = new Date()
+  const yesterday = new Date(Date.now() - 86_400_000)
+  const hour = time.slice(0, 5).replace('-', ':')
+  if (date === today.toLocaleDateString('sv')) return `Hoje, ${hour}`
+  if (date === yesterday.toLocaleDateString('sv')) return `Ontem, ${hour}`
+  return `${day.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}, ${hour}`
+}
+
+const titleOf = (meeting) => meeting.title || `Reunião de ${formatWhen(meeting.id)}`
+
+function dotClass(meeting) {
+  if (isProcessing(meeting.id)) return 'dot busy'
+  return meeting.hasSummary ? 'dot ok' : 'dot warn'
+}
+
+function previewOf(meeting) {
+  if (isProcessing(meeting.id)) return statuses.get(meeting.id)
+  return meeting.preview || 'Sem resumo ainda'
+}
+
 async function refreshList() {
-  const ids = await api.listMeetings()
-  if (!ids.length) return ($('#meetings').innerHTML = '<li class="muted">Nenhuma reunião gravada ainda.</li>')
+  meetings = await api.listMeetings()
+  renderList()
+}
+
+function renderList() {
+  const query = $('#search').value.trim().toLowerCase()
+  const visible = meetings.filter((m) => `${titleOf(m)} ${m.preview}`.toLowerCase().includes(query))
+  $('#count').textContent = meetings.length || ''
+  $('#no-meeting').hidden = Boolean(selectedId)
+  if (!visible.length) {
+    $('#meetings').replaceChildren(el('p', { className: 'empty', textContent: query ? 'Nada encontrado.' : 'Nenhuma reunião ainda.' }))
+    return
+  }
   $('#meetings').replaceChildren(
-    ...ids.map((id) => {
-      const button = document.createElement('button')
-      button.textContent = formatId(id)
-      button.dataset.id = id
-      button.onclick = () => showMeeting(id)
-      const item = document.createElement('li')
-      item.append(button)
-      return item
+    ...visible.map((meeting) => {
+      const row = el(
+        'button',
+        { className: meeting.id === selectedId ? 'row on' : 'row', onclick: () => showMeeting(meeting.id) },
+        el('span', { className: dotClass(meeting), ariaHidden: 'true' }),
+        el(
+          'span',
+          { className: 'row-body' },
+          el('span', { className: 'row-title', textContent: titleOf(meeting) }),
+          el('span', { className: 'row-meta', textContent: `${formatWhen(meeting.id)} · ${meeting.minutes} min` }),
+          el('span', { className: 'row-preview', textContent: previewOf(meeting) }),
+        ),
+      )
+      if (meeting.id === selectedId) row.setAttribute('aria-current', 'true')
+      return row
     }),
   )
 }
 
 async function showMeeting(id) {
+  const meeting = meetings.find((m) => m.id === id)
+  if (!meeting) return
   selectedId = id
   const { summary, transcript } = await api.readMeeting(id)
+  summaryText = summary
   $('#meeting').hidden = false
-  $('#meeting-title').textContent = formatId(id)
-  $('#meeting-status').textContent = statuses.get(id) ?? ''
-  $('#summary').textContent = summary ?? 'Ainda sem resumo. Clique em "Processar".'
-  $('#transcript').textContent = transcript ?? 'Ainda sem transcrição.'
-  $('#copy-summary').disabled = !summary
-  $('#process').disabled = isProcessing(id)
-  document.querySelectorAll('nav button').forEach((button) => button.setAttribute('aria-current', button.dataset.id === id))
+  $('#title').textContent = titleOf(meeting)
+  $('#meta').textContent = `${formatWhen(id)} · ${meeting.minutes} min`
+  $('#copy').disabled = !summary
+  renderMeetingStatus()
+  renderSummary(id, summary)
+  renderTranscript(transcript)
+  renderTab()
+  renderList()
 }
 
-function formatId(id) {
-  const [date, time] = id.split(' ')
-  return `${date.split('-').reverse().join('/')} ${time.slice(0, 5).replace('-', ':')}`
+function renderMeetingStatus() {
+  const status = statuses.get(selectedId) ?? ''
+  $('#meeting-status').textContent = status
+  $('#meeting-status').classList.toggle('error', status.startsWith('Erro'))
+  $('#process').disabled = isProcessing(selectedId)
+}
+
+function renderSummary(id, markdown) {
+  if (!markdown) {
+    $('#panel-summary').replaceChildren(
+      el(
+        'div',
+        { className: 'card no-summary' },
+        el('p', { textContent: 'Ainda sem resumo. A transcrição bruta fica na aba Transcrição quando existir.' }),
+        el('button', { className: 'btn', textContent: 'Processar', disabled: isProcessing(id), onclick: () => processMeeting(id) }),
+      ),
+    )
+    return
+  }
+  const cards = parseSummary(markdown).sections.map((section) => {
+    const card = el('section', { className: 'card' })
+    if (section.heading) card.append(el('h2', { textContent: section.heading }))
+    let list
+    for (const item of section.items) {
+      if (item.kind === 'task') {
+        card.append(taskRow(id, item))
+        continue
+      }
+      if (item.kind === 'bullet') {
+        list ??= card.appendChild(el('ul'))
+        list.append(el('li', { textContent: item.text }))
+        continue
+      }
+      list = undefined
+      card.append(el('p', { textContent: item.text }))
+    }
+    return card
+  })
+  $('#panel-summary').replaceChildren(...cards)
+}
+
+function taskRow(id, item) {
+  const checkbox = el('input', { type: 'checkbox', checked: item.done })
+  const row = el('label', { className: item.done ? 'task done' : 'task' }, checkbox, el('span', { textContent: item.text }))
+  checkbox.onchange = async () => {
+    row.classList.toggle('done', checkbox.checked)
+    await api.toggleTask(id, item.index, checkbox.checked)
+    summaryText = (await api.readMeeting(id)).summary
+  }
+  return row
+}
+
+function renderTranscript(transcript) {
+  const lines = parseTranscript(transcript)
+  if (!lines.length) {
+    $('#panel-transcript').replaceChildren(el('p', { className: 'muted', textContent: 'Ainda sem transcrição.' }))
+    return
+  }
+  $('#panel-transcript').replaceChildren(
+    el('div', { className: 'card' }, ...lines.map((line) => el('p', { className: 'line' }, el('time', { textContent: line.time }), el('span', { textContent: line.text })))),
+  )
+}
+
+function renderTab() {
+  for (const [name, button, panel] of [
+    ['summary', '#tab-summary', '#panel-summary'],
+    ['transcript', '#tab-transcript', '#panel-transcript'],
+  ]) {
+    $(button).classList.toggle('on', tab === name)
+    $(button).setAttribute('aria-selected', tab === name)
+    $(panel).hidden = tab !== name
+  }
+}
+
+function showView(view) {
+  $('#view-meetings').hidden = view !== 'meetings'
+  $('#view-settings').hidden = view !== 'settings'
+  document.querySelectorAll('.nav').forEach((button) => button.classList.toggle('on', button.dataset.view === view))
 }
 
 function writeSection(section, config) {
-  for (const field of FIELDS) {
-    const input = form.elements[`${section}.${field}`]
-    if (input) input.value = config[field] ?? ''
-  }
-  const cloud = form.querySelector(`[data-section=${section}] .cloud`)
-  if (cloud) cloud.hidden = config.provider === 'local'
+  for (const field of FIELDS) form.elements[`${section}.${field}`].value = config[field] ?? ''
+  form.querySelectorAll(`[data-section=${section}] .cloud`).forEach((row) => (row.hidden = config.provider === 'local'))
 }
 
 function readSection(section) {
-  return Object.fromEntries(FIELDS.map((field) => [field, form.elements[`${section}.${field}`]?.value.trim() ?? '']))
+  return Object.fromEntries(FIELDS.map((field) => [field, form.elements[`${section}.${field}`].value.trim()]))
+}
+
+const shortLabel = (section, provider) => PRESETS[section][provider]?.label.split(' (')[0] ?? provider
+
+function renderProviderLabels(settings) {
+  $('#asr-label').textContent = shortLabel('transcription', settings.transcription.provider)
+  $('#llm-label').textContent = shortLabel('llm', settings.llm.provider)
 }
 
 for (const [section, presets] of Object.entries(PRESETS)) {
-  const select = form.elements[`${section}.provider`]
-  select.append(...Object.entries(presets).map(([value, { label }]) => new Option(label, value)))
-  select.onchange = () => writeSection(section, fromPreset(presets, select.value))
+  form.elements[`${section}.provider`].append(...Object.entries(presets).map(([value, { label }]) => new Option(label, value)))
 }
 
-$('#open-settings').onclick = async () => {
-  const settings = await api.getSettings()
-  writeSection('transcription', settings.transcription)
-  writeSection('llm', settings.llm)
-  $('#settings').showModal()
-}
-
-$('#settings').onclose = () => {
-  if ($('#settings').returnValue !== 'save') return
-  api.saveSettings({ transcription: readSection('transcription'), llm: readSection('llm') })
-}
+form.addEventListener('submit', (event) => event.preventDefault())
+form.addEventListener('change', async (event) => {
+  const [section, field] = event.target.name.split('.')
+  if (field === 'provider') writeSection(section, fromPreset(PRESETS[section], event.target.value))
+  const settings = { transcription: readSection('transcription'), llm: readSection('llm') }
+  await api.saveSettings(settings)
+  renderProviderLabels(settings)
+  $('#saved').textContent = 'Salvo. As chaves ficam criptografadas pelo sistema.'
+})
 
 $('#record').onclick = toggleRecording
+document.querySelectorAll('.nav').forEach((button) => (button.onclick = () => showView(button.dataset.view)))
+$('#search').oninput = renderList
+const selectTab = (name) => () => {
+  tab = name
+  renderTab()
+}
+$('#tab-summary').onclick = selectTab('summary')
+$('#tab-transcript').onclick = selectTab('transcript')
 $('#process').onclick = () => processMeeting(selectedId)
 $('#open-folder').onclick = () => api.openMeeting(selectedId)
-$('#copy-summary').onclick = async () => navigator.clipboard.writeText((await api.readMeeting(selectedId)).summary)
+$('#copy').onclick = async () => {
+  await navigator.clipboard.writeText(summaryText)
+  $('#meeting-status').textContent = 'Resumo copiado'
+  setTimeout(renderMeetingStatus, 1500)
+}
+
 api.onStatus(setStatus)
+api.onToggleRecording(toggleRecording)
+api.onShowSettings(() => showView('settings'))
+api.onShowMeeting(async (id) => {
+  showView('meetings')
+  await refreshList()
+  await showMeeting(id)
+})
+
+const settings = await api.getSettings()
+writeSection('transcription', settings.transcription)
+writeSection('llm', settings.llm)
+renderProviderLabels(settings)
+
+const shortcut = await api.shortcut()
+$('#shortcut').hidden = !shortcut
+$('#shortcut').textContent = shortcut ?? ''
+$('#shortcut-setting').textContent = shortcut ?? 'indisponível (outro app já usa)'
 
 await refreshList()
+if (meetings.length) await showMeeting(meetings[0].id)

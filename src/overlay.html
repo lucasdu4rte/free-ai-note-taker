@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>Gravação</title>
+    <style>
+      html, body { height: 100%; margin: 0; overflow: hidden; background: transparent; }
+      body { color: #f2f2f2; font: 13px/18px 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; user-select: none; }
+      button { font: inherit; cursor: pointer; -webkit-app-region: no-drag; }
+      :focus-visible { outline: 2px solid #6ea2ff; outline-offset: 2px; }
+      [hidden] { display: none !important; }
+      .wrap { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; padding-bottom: 4px; box-sizing: border-box; }
+      .chips { display: flex; gap: 6px; }
+      .chip { min-height: 26px; padding: 0 10px; border: 1px solid #2c2c30; border-radius: 999px; background: #1a1a1c; color: #f2f2f2; font-size: 12px; }
+      .chip:hover { background: #242427; }
+      .bar { -webkit-app-region: drag; display: flex; align-items: center; gap: 12px; width: 600px; box-sizing: border-box; min-height: 52px; padding: 8px 8px 8px 10px; border-radius: 16px; border: 1px solid #2c2c30; background: #0c0c0d; }
+      .logo { position: relative; flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9px; background: #f2f2f2; color: #0c0c0d; }
+      .badge { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #ff5a52; border: 2px solid #0c0c0d; animation: pulse 1.4s ease-in-out infinite; }
+      .wave { display: flex; align-items: center; gap: 2px; height: 24px; }
+      .wave span { display: block; width: 3px; height: 3px; border-radius: 2px; background: #f2f2f2; transition: height 120ms linear; }
+      .text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+      .text span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .muted { color: #a3a3a8; }
+      .progress { height: 3px; border-radius: 2px; background: #2c2c30; overflow: hidden; }
+      .progress span { display: block; width: 35%; height: 3px; background: #6ea2ff; animation: slide 1.2s ease-in-out infinite; }
+      .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
+      .action { min-height: 34px; padding: 0 14px; border: 0; border-radius: 10px; background: #f2f2f2; color: #0c0c0d; font-weight: 600; }
+      .action.stop { background: #ff5a52; }
+      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+      @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+      @media (prefers-reduced-motion: reduce) { .badge, .progress span { animation: none; } .wave span { transition: none; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div id="chips" class="chips" hidden>
+        <button id="chip-sources" class="chip" title="Abrir as configurações"></button>
+        <button id="chip-llm" class="chip" title="Abrir as configurações"></button>
+      </div>
+      <div class="bar" role="group" aria-label="Gravação da reunião">
+        <span class="logo" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
+          <span id="badge" class="badge" hidden></span>
+        </span>
+        <span id="wave" class="wave" aria-hidden="true" hidden></span>
+        <div class="text">
+          <span id="text" role="status"></span>
+          <div id="progress" class="progress" aria-hidden="true" hidden><span></span></div>
+        </div>
+        <span id="timer" class="timer" role="timer" aria-label="Tempo de gravação" hidden></span>
+        <button id="stop" class="action stop" hidden>Parar</button>
+        <button id="open" class="action" hidden>Abrir</button>
+      </div>
+    </div>
+    <script type="module" src="overlay.js"></script>
+  </body>
+</html>

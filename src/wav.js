@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 
 export const SAMPLE_RATE = 16000
-const HEADER_BYTES = 44
+export const HEADER_BYTES = 44
 
 export function wavHeader(dataBytes, sampleRate = SAMPLE_RATE) {
   const header = Buffer.alloc(HEADER_BYTES)

@@ -7,6 +7,8 @@ Responda apenas com o texto corrigido.`
 
 const SUMMARY_PROMPT = `Você escreve atas de reunião. A partir da transcrição, escreva em Markdown, no idioma da reunião:
 
+# Título curto da reunião (até 6 palavras)
+
 ## Resumo
 3 a 6 frases com o objetivo e as conclusões.
 
