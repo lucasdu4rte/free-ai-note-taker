@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseSummary, parseTranscript, summaryPreview, toggleTask } from '../src/notes.js'
+import { STEPS, parseSummary, parseTranscript, stepStates, summaryPreview, toggleTask } from '../src/notes.js'
 
 const SUMMARY = `# Planejamento da sprint 42
 
@@ -44,4 +44,10 @@ test('transcript lines keep their timestamps', () => {
     { time: '00:04', text: 'Bom dia.' },
     { time: '1:02:05', text: 'Tchau.' },
   ])
+})
+
+test('a step shows the current run when it has one, otherwise what is on disk', () => {
+  assert.deepEqual(stepStates(['transcribe'], undefined), ['done', 'pending', 'pending'])
+  assert.deepEqual(stepStates(STEPS, { step: 'clean', detail: 'Revisando o texto 1/3' }), ['done', 'running', 'pending'])
+  assert.deepEqual(stepStates(STEPS, { step: 'clean', error: 'HTTP 503' }), ['done', 'error', 'done'])
 })

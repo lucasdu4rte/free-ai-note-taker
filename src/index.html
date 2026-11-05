@@ -105,7 +105,8 @@
       .icon-btn:hover { background: var(--hover); color: var(--text); }
       .status-line { flex-shrink: 0; margin: 0 20px 10px; font-size: 12px; color: var(--muted); }
       .status-line:empty { display: none; }
-      .status-line.error { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--warn); background: var(--group); color: var(--text); }
+      .steps { flex-shrink: 0; margin: 0 20px 12px; padding: 0; list-style: none; }
+      .steps small { overflow-wrap: anywhere; }
       #player { flex-shrink: 0; width: calc(100% - 40px); height: 36px; margin: 0 20px 12px; }
       .segmented { flex-shrink: 0; align-self: flex-start; display: inline-flex; gap: 2px; margin: 0 20px 12px; padding: 2px; border-radius: 8px; background: var(--group); }
       .seg { min-height: 28px; padding: 0 14px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
@@ -123,7 +124,6 @@
       .line time { flex-shrink: 0; width: 52px; font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12px; color: var(--accent); }
       .line span { max-width: 72ch; }
       .no-summary { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; color: var(--muted); }
-      .btn { min-height: 32px; padding: 0 14px; border: 0; border-radius: 6px; background: var(--accent); color: var(--on-accent); font-weight: 600; }
 
       .settings { overflow-y: auto; }
       .settings-body { width: 100%; max-width: 720px; padding: 20px 28px 40px; display: flex; flex-direction: column; gap: 18px; }
@@ -151,6 +151,7 @@
       .test-btn { flex-shrink: 0; min-height: 30px; padding: 0 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); font-weight: 600; }
       .test-btn:hover:not(:disabled) { background: var(--hover); }
       .setting small.ok { color: var(--ok); }
+      .setting small.busy { color: var(--accent); }
       .setting small.error { color: var(--rec); }
 
       @media (prefers-reduced-motion: reduce) { .dot.rec, .dot.busy { animation: none; } }
@@ -204,11 +205,12 @@
               <button id="open-folder" class="icon-btn" aria-label="Abrir pasta" title="Abrir pasta">
                 <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>
               </button>
-              <button id="process" class="icon-btn" aria-label="Processar de novo" title="Processar de novo">
+              <button id="process" class="icon-btn" aria-label="Revisar e resumir de novo" title="Revisar e resumir de novo">
                 <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg>
               </button>
             </header>
             <p id="meeting-status" class="status-line" role="status"></p>
+            <ol id="steps" class="group steps" aria-label="Etapas do processamento" hidden></ol>
             <audio id="player" controls preload="metadata" aria-label="Áudio da reunião" hidden></audio>
             <div class="segmented" role="tablist" aria-label="Conteúdo da reunião">
               <button id="tab-summary" class="seg on" role="tab" aria-selected="true" aria-controls="panel-summary">Resumo</button>

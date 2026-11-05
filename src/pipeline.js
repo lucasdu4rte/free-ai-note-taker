@@ -6,6 +6,7 @@ import { LOCAL_ASR_MODELS, VAD_MODEL, ensureModels } from './models.js'
 import { speechSegments, transcribeCloud, transcribeLocal } from './transcribe.js'
 import { cleanTranscript, summarize, withTestLimits } from './llm.js'
 import { repairWavHeader } from './wav.js'
+import { STEPS } from './notes.js'
 
 export const FILES = {
   audio: 'audio.wav',
@@ -17,23 +18,28 @@ export const FILES = {
 
 const SAMPLE_AUDIO = path.join(import.meta.dirname, 'sample.wav')
 
-export async function processMeeting(dir, settings, modelsDir, onStatus = () => {}) {
+const STEP_OUTPUTS = { transcribe: FILES.rawTranscript, clean: FILES.transcript, summarize: FILES.summary }
+
+export const completedSteps = (dir) => STEPS.filter((step) => fs.existsSync(path.join(dir, STEP_OUTPUTS[step])))
+
+// Starting at `from` reuses the earlier outputs, so retrying a failed LLM step (e.g. a free-tier quota) never redoes the transcription.
+export async function processMeeting(dir, settings, modelsDir, onProgress = () => {}, from = STEPS[0]) {
+  if (!STEPS.includes(from)) throw new Error(`Etapa inválida: ${from}`)
   const file = (name) => path.join(dir, name)
-
-  // Reprocessing after an LLM failure (e.g. a free-tier quota) reuses the transcript instead of redoing it.
-  let raw = readIfExists(file(FILES.rawTranscript))
-  if (!raw) {
-    raw = await transcribe(file(FILES.audio), settings.transcription, modelsDir, onStatus)
-    if (!raw) throw new Error('Nenhuma fala foi detectada no áudio.')
-    fs.writeFileSync(file(FILES.rawTranscript), raw)
+  const read = (step) => fs.readFileSync(file(STEP_OUTPUTS[step]), 'utf8')
+  const run = {
+    transcribe: async (report) => {
+      const raw = await transcribe(file(FILES.audio), settings.transcription, modelsDir, report)
+      if (!raw) throw new Error('Nenhuma fala foi detectada no áudio.')
+      return raw
+    },
+    clean: (report) => cleanTranscript(read('transcribe'), settings.llm, report),
+    summarize: () => summarize(read('clean'), settings.llm),
   }
-
-  const transcript = await cleanTranscript(raw, settings.llm, onStatus)
-  fs.writeFileSync(file(FILES.transcript), transcript)
-
-  onStatus('Gerando o resumo')
-  fs.writeFileSync(file(FILES.summary), await summarize(transcript, settings.llm))
-  onStatus('Pronto')
+  for (const step of STEPS.slice(STEPS.indexOf(from))) {
+    onProgress(step)
+    fs.writeFileSync(file(STEP_OUTPUTS[step]), await run[step]((detail) => onProgress(step, detail)))
+  }
 }
 
 export async function testTranscription(config, modelsDir, onStatus = () => {}) {

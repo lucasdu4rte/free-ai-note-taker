@@ -4,11 +4,11 @@ Grava reuniões do Teams (ou Meet, Zoom, qualquer áudio do PC), transcreve e ge
 
 ## Como funciona
 
-1. **Gravar** (ou `Ctrl+Alt+R` de qualquer janela) captura o microfone e o som do computador (WASAPI loopback no Windows), sem driver nem cabo virtual. Uma barra flutuante fica por cima do Teams com o nível do áudio, o tempo e o botão Parar, e depois mostra o andamento até a ata ficar pronta. O áudio vai sendo salvo em disco enquanto você grava, então um travamento não perde a reunião.
+1. **Gravar** (ou `Ctrl+Alt+R` de qualquer janela) captura o microfone e o som do computador (WASAPI loopback no Windows), sem driver nem cabo virtual. Uma barra flutuante fica por cima do Teams com o nível do áudio, o tempo e o botão Parar. O áudio vai sendo salvo em disco enquanto você grava, então um travamento não perde a reunião.
 2. Ao parar, o app separa os trechos de fala (Silero VAD) e transcreve.
 3. Uma IA revisa o texto (pontuação, palavras erradas, vícios de linguagem) e escreve a ata: resumo, decisões, próximos passos com responsáveis e tópicos.
 
-Cada reunião vira uma pasta em `Documentos\Free AI Note Taker\<data hora>\` com `audio.wav`, `transcricao-bruta.md`, `transcricao.md` e `resumo.md` (e `titulo.txt`, se você renomear a reunião clicando no título). Se a IA falhar (cota do plano grátis, por exemplo), o botão **Processar** tenta de novo reaproveitando a transcrição.
+Cada reunião vira uma pasta em `Documentos\Free AI Note Taker\<data hora>\` com `audio.wav`, `transcricao-bruta.md`, `transcricao.md` e `resumo.md` (e `titulo.txt`, se você renomear a reunião clicando no título). A reunião mostra o andamento de cada etapa (transcrição, revisão do texto e resumo). Se uma falhar (cota do plano grátis da IA, por exemplo), o erro aparece nela e **Tentar de novo** refaz só essa etapa e as seguintes, reaproveitando o que já ficou pronto.
 
 ## Serviços suportados
 

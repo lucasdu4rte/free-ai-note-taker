@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   sendAudio: (samples) => ipcRenderer.send('recording:chunk', samples),
   sendLevel: (level) => ipcRenderer.send('recording:level', level),
   stopRecording: () => ipcRenderer.invoke('recording:stop'),
-  processMeeting: (id) => ipcRenderer.invoke('meeting:process', id),
+  processMeeting: (id, from) => ipcRenderer.invoke('meeting:process', id, from),
   listMeetings: () => ipcRenderer.invoke('meetings:list'),
   readMeeting: (id) => ipcRenderer.invoke('meeting:read', id),
   toggleTask: (id, index, done) => ipcRenderer.invoke('meeting:toggle-task', id, index, done),
@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   onTestStatus: on('settings:test-status'),
   onUpdateReady: on('update:ready'),
   installUpdate: () => ipcRenderer.send('update:install'),
-  onStatus: on('status'),
+  onMeetingProgress: on('meeting:progress'),
   onToggleRecording: on('recording:toggle'),
   onShowSettings: on('settings:show'),
 

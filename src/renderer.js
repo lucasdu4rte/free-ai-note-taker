@@ -1,5 +1,5 @@
 import { LLM_PRESETS, TRANSCRIPTION_PRESETS, fromPreset } from './presets.js'
-import { parseSummary, parseTranscript } from './notes.js'
+import { STEPS, parseSummary, parseTranscript, stepStates } from './notes.js'
 
 const { api } = window
 const $ = (selector) => document.querySelector(selector)
@@ -7,9 +7,18 @@ const PRESETS = { transcription: TRANSCRIPTION_PRESETS, llm: LLM_PRESETS }
 const FIELDS = ['provider', 'apiKey', 'model', 'baseURL', 'mode']
 const SAVE_DELAY_MS = 400
 const SAVED_BADGE_MS = 2500
+const STEP_LABELS = { transcribe: 'Transcrição', clean: 'Revisão do texto', summarize: 'Resumo' }
+const STEP_VIEWS = {
+  pending: { tone: '', text: () => 'Pendente', action: 'Processar' },
+  running: { tone: 'busy', text: (run) => run.detail || 'Em andamento' },
+  done: { tone: 'ok', text: () => 'Concluída' },
+  error: { tone: 'error', text: (run) => run.error, action: 'Tentar de novo' },
+}
 const form = $('#settings-form')
-const statuses = new Map()
+// Per meeting: { step, detail } while it runs, { step, error } after it fails.
+const runs = new Map()
 let meetings = []
+let doneSteps = []
 let selectedId
 let summaryText
 let tab = 'summary'
@@ -73,7 +82,7 @@ async function toggleRecording() {
     showView('meetings')
     await refreshList()
     await showMeeting(id)
-    processMeeting(id)
+    processMeeting(id, 'transcribe')
   } catch (error) {
     alert(`Não foi possível gravar: ${error.message}`)
   } finally {
@@ -81,32 +90,33 @@ async function toggleRecording() {
   }
 }
 
-async function processMeeting(id) {
-  setStatus(id, 'Processando…')
+async function processMeeting(id, from) {
+  setRun(id, { step: from })
   try {
-    await api.processMeeting(id)
-    setStatus(id, '')
+    await api.processMeeting(id, from)
+    runs.delete(id)
   } catch (error) {
-    setStatus(id, `Erro: ${errorText(error)}`)
+    runs.set(id, { step: runs.get(id).step, error: errorText(error) })
   }
+  renderRecordState()
   await refreshList()
   if (id === selectedId) await showMeeting(id)
 }
 
 const errorText = (error) => error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 
-const isProcessing = (id) => Boolean(statuses.get(id)) && !statuses.get(id).startsWith('Erro')
+const isProcessing = (id) => runs.has(id) && !runs.get(id).error
 
-function setStatus(id, status) {
-  statuses.set(id, status)
-  if (id === selectedId) renderMeetingStatus()
+function setRun(id, run) {
+  runs.set(id, run)
+  if (id === selectedId) renderSteps()
   renderRecordState()
   renderList()
 }
 
 function appState() {
   if (recording) return { label: 'Gravando', dot: 'rec' }
-  if ([...statuses.keys()].some(isProcessing)) return { label: 'Processando', dot: 'busy' }
+  if ([...runs.keys()].some(isProcessing)) return { label: 'Processando', dot: 'busy' }
   return { label: 'Pronto', dot: 'ok' }
 }
 
@@ -139,7 +149,8 @@ function dotClass(meeting) {
 }
 
 function previewOf(meeting) {
-  if (isProcessing(meeting.id)) return statuses.get(meeting.id)
+  const run = runs.get(meeting.id)
+  if (isProcessing(meeting.id)) return run.detail || STEP_LABELS[run.step]
   return meeting.preview || 'Sem resumo ainda'
 }
 
@@ -183,13 +194,14 @@ async function showMeeting(id) {
   const meeting = meetings.find((m) => m.id === id)
   if (!meeting) return
   selectedId = id
-  const { summary, transcript, audioUrl } = await api.readMeeting(id)
+  const { summary, transcript, audioUrl, done } = await api.readMeeting(id)
   summaryText = summary
+  doneSteps = done
   $('#meeting').hidden = false
   $('#title').textContent = titleOf(meeting)
   $('#meta').textContent = `${formatWhen(id)} · ${meeting.minutes} min`
   $('#copy').disabled = !summary
-  renderMeetingStatus()
+  renderSteps()
   renderPlayer(audioUrl)
   renderSummary(id, summary)
   renderTranscript(transcript)
@@ -205,11 +217,22 @@ function renderPlayer(audioUrl) {
   if (player.getAttribute('src') !== audioUrl) player.src = audioUrl
 }
 
-function renderMeetingStatus() {
-  const status = statuses.get(selectedId) ?? ''
-  $('#meeting-status').textContent = status
-  $('#meeting-status').classList.toggle('error', status.startsWith('Erro'))
-  $('#process').disabled = isProcessing(selectedId)
+function renderSteps() {
+  const run = runs.get(selectedId)
+  const states = stepStates(doneSteps, run)
+  const firstUndone = states.findIndex((state) => state !== 'done')
+  const idle = !isProcessing(selectedId)
+  $('#steps').hidden = firstUndone === -1
+  $('#steps').replaceChildren(...STEPS.map((step, i) => stepRow(selectedId, step, states[i], run, idle && i === firstUndone)))
+  $('#process').disabled = !idle || !doneSteps.includes('transcribe')
+}
+
+function stepRow(id, step, state, run, withAction) {
+  const view = STEP_VIEWS[state]
+  const detail = el('small', { className: view.tone, textContent: view.text(run) })
+  if (state === 'error') detail.role = 'alert'
+  const action = withAction ? el('button', { type: 'button', className: 'test-btn', textContent: view.action, onclick: () => processMeeting(id, step) }) : undefined
+  return el('li', { className: 'setting' }, el('span', {}, STEP_LABELS[step], detail), action)
 }
 
 function renderSummary(id, markdown) {
@@ -219,7 +242,6 @@ function renderSummary(id, markdown) {
         'div',
         { className: 'card no-summary' },
         el('p', { textContent: 'Ainda sem resumo. A transcrição bruta fica na aba Transcrição quando existir.' }),
-        el('button', { className: 'btn', textContent: 'Processar', disabled: isProcessing(id), onclick: () => processMeeting(id) }),
       ),
     )
     return
@@ -385,7 +407,7 @@ const selectTab = (name) => () => {
 }
 $('#tab-summary').onclick = selectTab('summary')
 $('#tab-transcript').onclick = selectTab('transcript')
-$('#process').onclick = () => processMeeting(selectedId)
+$('#process').onclick = () => processMeeting(selectedId, 'clean')
 $('#title').onkeydown = (event) => {
   if (event.key === 'Enter') event.preventDefault()
   if (event.key === 'Escape') $('#title').textContent = titleOf(selectedMeeting())
@@ -402,10 +424,10 @@ $('#open-folder').onclick = () => api.openMeeting(selectedId)
 $('#copy').onclick = async () => {
   await navigator.clipboard.writeText(summaryText)
   $('#meeting-status').textContent = 'Resumo copiado'
-  setTimeout(renderMeetingStatus, 1500)
+  setTimeout(() => ($('#meeting-status').textContent = ''), 1500)
 }
 
-api.onStatus(setStatus)
+api.onMeetingProgress((id, step, detail) => setRun(id, { step, detail }))
 api.onToggleRecording(toggleRecording)
 api.onShowSettings(() => showView('settings'))
 

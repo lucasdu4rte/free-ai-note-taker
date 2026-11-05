@@ -6,7 +6,8 @@ import path from 'node:path'
 import { test } from 'node:test'
 import sherpa from 'sherpa-onnx-node'
 import { LOCAL_ASR_MODELS, downloadFile, ensureModels } from '../src/models.js'
-import { FILES, formatTime, processMeeting, testTranscription } from '../src/pipeline.js'
+import { FILES, completedSteps, formatTime, processMeeting, testTranscription } from '../src/pipeline.js'
+import { STEPS } from '../src/notes.js'
 import { groupSegments, speechSegments, transcribeLocal } from '../src/transcribe.js'
 import { postJson, splitIntoBlocks, summarize, testLlm } from '../src/llm.js'
 import { encodeWav, repairWavHeader, wavHeader } from '../src/wav.js'
@@ -114,7 +115,8 @@ test('a meeting goes from audio to transcript and summary with cloud providers',
   fs.copyFileSync(FIXTURE, path.join(dir, FILES.audio))
   const provider = { provider: 'custom', baseURL: server.url, apiKey: 'secret', model: 'm', mode: 'transcriptions' }
 
-  await processMeeting(dir, { transcription: provider, llm: provider }, MODELS_DIR)
+  const reportedSteps = new Set()
+  await processMeeting(dir, { transcription: provider, llm: provider }, MODELS_DIR, (step) => reportedSteps.add(step))
 
   assert.match(fs.readFileSync(path.join(dir, FILES.rawTranscript), 'utf8'), /^\[00:0\d\] bom dia pessoal$/)
   assert.equal(fs.readFileSync(path.join(dir, FILES.transcript), 'utf8'), 'Bom dia, pessoal.')
@@ -122,6 +124,47 @@ test('a meeting goes from audio to transcript and summary with cloud providers',
   assert.deepEqual(requests.map((r) => r.url), ['/audio/transcriptions', '/chat/completions', '/chat/completions'])
   assert.ok(requests.every((r) => r.auth === 'Bearer secret'))
   assert.match(requests[0].body, /RIFF/)
+  assert.deepEqual([...reportedSteps], STEPS)
+  assert.deepEqual(completedSteps(dir), STEPS)
+  server.close()
+})
+
+test('a failed step can be retried on its own', async () => {
+  let summaryFails = true
+  const calls = []
+  const server = await fakeApi(async (req, res) => {
+    const isSummary = JSON.parse(await readBody(req)).messages[0].content.includes('atas de reunião')
+    calls.push(isSummary ? 'summarize' : 'clean')
+    if (isSummary && summaryFails) return res.writeHead(400).end(JSON.stringify({ error: { message: 'high demand' } }))
+    res.end(JSON.stringify({ choices: [{ message: { content: isSummary ? '## Resumo\nNovo.' : 'Bom dia.' } }] }))
+  })
+  const dir = tmp()
+  fs.writeFileSync(path.join(dir, FILES.rawTranscript), '[00:01] bom dia')
+  const settings = { llm: { provider: 'custom', baseURL: server.url, model: 'm' } }
+
+  await assert.rejects(processMeeting(dir, settings, MODELS_DIR, () => {}, 'clean'), /HTTP 400: high demand/)
+  assert.deepEqual(completedSteps(dir), ['transcribe', 'clean'])
+
+  summaryFails = false
+  const reportedSteps = new Set()
+  await processMeeting(dir, settings, MODELS_DIR, (step) => reportedSteps.add(step), 'summarize')
+
+  assert.deepEqual(calls, ['clean', 'summarize', 'summarize'])
+  assert.deepEqual([...reportedSteps], ['summarize'])
+  assert.equal(fs.readFileSync(path.join(dir, FILES.summary), 'utf8'), '## Resumo\nNovo.')
+  server.close()
+})
+
+test('an unknown step is rejected', async () => {
+  let calls = 0
+  const server = await fakeApi((_req, res) => {
+    calls++
+    res.end('{}')
+  })
+  const provider = { provider: 'custom', baseURL: server.url, model: 'm' }
+
+  await assert.rejects(processMeeting(tmp(), { transcription: provider, llm: provider }, MODELS_DIR, () => {}, 'x'), /Etapa inválida: x/)
+  assert.equal(calls, 0)
   server.close()
 })
 

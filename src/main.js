@@ -4,7 +4,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import electronUpdater from 'electron-updater'
 import { DEFAULT_SETTINGS, LLM_PRESETS } from './presets.js'
-import { FILES, processMeeting, readIfExists, testTranscription } from './pipeline.js'
+import { FILES, completedSteps, processMeeting, readIfExists, testTranscription } from './pipeline.js'
 import { testLlm } from './llm.js'
 import { parseSummary, summaryPreview, toggleTask } from './notes.js'
 import { HEADER_BYTES, SAMPLE_RATE, floatToInt16, repairWavHeader, wavHeader } from './wav.js'
@@ -142,10 +142,11 @@ ipcMain.handle('recording:stop', () => {
   return id
 })
 
-ipcMain.handle('meeting:process', async (event, id) => {
+ipcMain.handle('meeting:process', async (event, id, from) => {
   // Processing the WAV still being written would cache a partial raw transcript for the real run after Parar.
   if (id === recording?.id) throw new Error('Pare a gravação antes de processar esta reunião.')
-  return processMeeting(meetingDir(id), await loadSettings(), modelsDir(), (status) => event.sender.send('status', id, status))
+  const report = (step, detail) => event.sender.send('meeting:progress', id, step, detail)
+  await processMeeting(meetingDir(id), await loadSettings(), modelsDir(), report, from)
 })
 
 ipcMain.handle('meetings:list', () => {
@@ -160,6 +161,7 @@ ipcMain.handle('meeting:read', (_event, id) => {
     summary: file(FILES.summary),
     transcript: file(FILES.transcript) ?? file(FILES.rawTranscript),
     audioUrl: fs.existsSync(audio) ? pathToFileURL(audio).href : undefined,
+    done: completedSteps(meetingDir(id)),
   }
 })
 

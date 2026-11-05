@@ -1,4 +1,16 @@
-// Pure parsing shared by the main process and the renderer, so it must not import Node or Electron modules.
+// Pure code shared by the main process and the renderer, so it must not import Node or Electron modules.
+
+export const STEPS = ['transcribe', 'clean', 'summarize']
+
+// During a run the later steps will be redone, so their old files on disk do not count as done.
+export function stepStates(done, run) {
+  const runIndex = STEPS.indexOf(run?.step)
+  return STEPS.map((step, i) => {
+    if (i === runIndex) return run.error ? 'error' : 'running'
+    if (run && !run.error) return i < runIndex ? 'done' : 'pending'
+    return done.includes(step) ? 'done' : 'pending'
+  })
+}
 
 export function parseSummary(markdown = '') {
   const lines = markdown.split('\n')
