@@ -22,6 +22,7 @@ Cada reunião vira uma pasta em `Documentos\Free AI Note Taker\<data hora>\` com
 | Revisão e resumo | Anthropic Claude Haiku 5.5 (`claude-haiku-5-5`) | US$ 0,10 / 0,50 por milhão de tokens de entrada/saída: centavos por reunião |
 | Revisão e resumo | Ollama (local) | Grátis, offline |
 | Revisão e resumo | Groq, OpenAI ou qualquer API compatível com OpenAI | Groq tem plano grátis com limite baixo |
+| Revisão e resumo | Qualquer API compatível com a da Anthropic (DeepSeek, Kimi, MiniMax...), em "Anthropic Compatível" | Depende do serviço |
 
 As chaves de API ficam criptografadas pelo sistema (DPAPI no Windows, Keychain no macOS). O Parakeet v3 entende 25 idiomas europeus, português incluso, e detecta o idioma sozinho.
 

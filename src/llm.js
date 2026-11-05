@@ -48,8 +48,10 @@ export function testLlm(config) {
   return complete(withTestLimits(config), 'Responda apenas com a palavra OK.', 'Teste de conexão.')
 }
 
+const ANTHROPIC_API_PROVIDERS = ['anthropic', 'anthropic-compatible']
+
 function complete(config, system, text) {
-  if (config.provider === 'anthropic') return completeWithClaude(config, system, text)
+  if (ANTHROPIC_API_PROVIDERS.includes(config.provider)) return completeWithClaude(config, system, text)
   return chat(config, [{ role: 'system', content: system }, { role: 'user', content: text }])
 }
 

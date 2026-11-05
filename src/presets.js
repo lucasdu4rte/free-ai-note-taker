@@ -8,16 +8,17 @@ export const TRANSCRIPTION_PRESETS = {
   groq: { label: 'Groq: Whisper (plano grátis)', baseURL: GROQ_URL, model: 'whisper-large-v3-turbo', mode: 'transcriptions' },
   gemini: { label: 'Google Gemini (plano grátis)', baseURL: GEMINI_URL, model: 'gemini-3.8-flash', mode: 'chat-audio' },
   openai: { label: 'OpenAI', baseURL: OPENAI_URL, model: 'gpt-4o-mini-transcribe', mode: 'transcriptions' },
-  custom: { label: 'Outro compatível com OpenAI', baseURL: '', model: '', mode: 'transcriptions' },
+  custom: { label: 'OpenAI Compatível', baseURL: '', model: '', mode: 'transcriptions' },
 }
 
 export const LLM_PRESETS = {
-  gemini: { label: 'Google Gemini (plano grátis)', baseURL: GEMINI_URL, model: 'gemini-3.8-flash' },
-  anthropic: { label: 'Anthropic: Claude Haiku 5.5 (barato)', baseURL: 'https://api.anthropic.com', model: 'claude-haiku-5-5' },
-  ollama: { label: 'Ollama (local, grátis)', baseURL: 'http://localhost:11434/v1', model: 'gemma3:4b' },
-  groq: { label: 'Groq (plano grátis, limite baixo)', baseURL: GROQ_URL, model: 'openai/gpt-oss-120b' },
+  gemini: { label: 'Google Gemini', baseURL: GEMINI_URL, model: 'gemini-3.8-flash' },
+  anthropic: { label: 'Anthropic', baseURL: 'https://api.anthropic.com', model: 'claude-haiku-5-5' },
+  ollama: { label: 'Ollama', baseURL: 'http://localhost:11434/v1', model: 'gemma3:4b' },
+  groq: { label: 'Groq', baseURL: GROQ_URL, model: 'openai/gpt-oss-120b' },
   openai: { label: 'OpenAI', baseURL: OPENAI_URL, model: 'gpt-5.4-mini' },
-  custom: { label: 'Outro compatível com OpenAI', baseURL: '', model: '' },
+  custom: { label: 'OpenAI Compatível', baseURL: '', model: '' },
+  'anthropic-compatible': { label: 'Anthropic Compatível', baseURL: '', model: '' },
 }
 
 export function fromPreset(presets, provider) {

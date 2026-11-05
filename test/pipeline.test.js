@@ -158,6 +158,22 @@ test('summaries can be written by Claude through the Anthropic API', async () =>
   server.close()
 })
 
+test('an Anthropic-compatible server gets the Messages API without Claude-only options', async () => {
+  let request
+  const server = await fakeApi(async (req, res) => {
+    request = { url: req.url, body: JSON.parse(await readBody(req)) }
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify(claudeMessage([{ type: 'text', text: 'OK' }])))
+  })
+  const config = { provider: 'anthropic-compatible', baseURL: server.url, apiKey: 'k', model: 'deepseek-chat' }
+
+  assert.equal(await testLlm(config), 'OK')
+  assert.equal(request.url, '/v1/messages')
+  assert.equal(request.body.max_tokens, 8192)
+  assert.equal(request.body.output_config, undefined)
+  server.close()
+})
+
 test('a Claude refusal is reported instead of saved as a summary', async () => {
   const server = await fakeApi((_req, res) => {
     res.setHeader('content-type', 'application/json')
