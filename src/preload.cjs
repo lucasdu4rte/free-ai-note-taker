@@ -5,6 +5,8 @@ const on = (channel) => (callback) => ipcRenderer.on(channel, (_event, ...args) 
 contextBridge.exposeInMainWorld('api', {
   platform: process.platform,
   shortcut: () => ipcRenderer.invoke('app:shortcut'),
+  pauseShortcut: () => ipcRenderer.invoke('app:shortcut-pause'),
+  setShortcut: (accelerator) => ipcRenderer.invoke('app:shortcut-set', accelerator),
   version: () => ipcRenderer.invoke('app:version'),
   startRecording: () => ipcRenderer.invoke('recording:start'),
   sendAudio: (samples) => ipcRenderer.send('recording:chunk', samples),

@@ -1,5 +1,5 @@
 import { LLM_PRESETS, TRANSCRIPTION_PRESETS, fromPreset, llmFromPreset } from './presets.js'
-import { STEPS, parseSummary, parseTranscript, stepStates } from './notes.js'
+import { STEPS, acceleratorFromKey, parseSummary, parseTranscript, stepStates } from './notes.js'
 
 const { api } = window
 const $ = (selector) => document.querySelector(selector)
@@ -480,10 +480,39 @@ writeConfig(transcriptionGroup, settings.transcription)
 renderLlmGroups([settings.llm, ...settings.llmFallbacks])
 renderProviderLabels(settings)
 
-const shortcut = await api.shortcut()
-$('#shortcut').hidden = !shortcut
-$('#shortcut').textContent = shortcut ?? ''
-$('#shortcut-setting').textContent = shortcut ?? 'indisponível (outro app já usa)'
+function renderShortcut(label, hint = 'Funciona com qualquer janela em foco') {
+  $('#shortcut').hidden = !label
+  $('#shortcut').textContent = label ?? ''
+  $('#shortcut-setting').textContent = label ?? 'indisponível (outro app já usa)'
+  $('#shortcut-hint').textContent = hint
+}
+
+function nextShortcut() {
+  return new Promise((resolve) => {
+    const onKey = (event) => {
+      event.preventDefault()
+      const cancelled = event.key === 'Escape'
+      const accelerator = acceleratorFromKey(event)
+      if (!cancelled && !accelerator) return
+      window.removeEventListener('keydown', onKey, true)
+      resolve(cancelled ? null : accelerator)
+    }
+    window.addEventListener('keydown', onKey, true)
+  })
+}
+
+async function changeShortcut() {
+  const button = $('#change-shortcut')
+  await api.pauseShortcut()
+  button.textContent = 'Pressione o atalho…'
+  const accelerator = await nextShortcut()
+  button.textContent = 'Alterar'
+  const { label, taken } = await api.setShortcut(accelerator)
+  renderShortcut(label, taken ? 'Essa combinação já é usada por outro app. Tente outra.' : undefined)
+}
+
+$('#change-shortcut').onclick = changeShortcut
+renderShortcut(await api.shortcut())
 $('#app-version').textContent = await api.version()
 
 await refreshList()

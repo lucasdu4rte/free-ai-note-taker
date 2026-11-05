@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { STEPS, parseSummary, parseTranscript, stepStates, summaryPreview, toggleTask } from '../src/notes.js'
+import { STEPS, acceleratorFromKey, parseSummary, parseTranscript, stepStates, summaryPreview, shortcutLabel, toggleTask } from '../src/notes.js'
 
 const SUMMARY = `# Planejamento da sprint 42
 
@@ -50,4 +50,18 @@ test('a step shows the current run when it has one, otherwise what is on disk', 
   assert.deepEqual(stepStates(['transcribe'], undefined), ['done', 'pending', 'pending'])
   assert.deepEqual(stepStates(STEPS, { step: 'clean', detail: 'Revisando o texto 1/3' }), ['done', 'running', 'pending'])
   assert.deepEqual(stepStates(STEPS, { step: 'clean', error: 'HTTP 503' }), ['done', 'error', 'done'])
+})
+
+test('a pressed key combination becomes a global shortcut', () => {
+  const press = (code, mods = {}) => acceleratorFromKey({ code, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...mods })
+  assert.equal(press('KeyR', { ctrlKey: true, altKey: true }), 'CommandOrControl+Alt+R')
+  assert.equal(press('Digit5', { metaKey: true, shiftKey: true }), 'CommandOrControl+Shift+5')
+  assert.equal(press('F9', { altKey: true }), 'Alt+F9')
+  assert.equal(press('KeyR', { shiftKey: true }), null)
+  assert.equal(press('ControlLeft', { ctrlKey: true }), null)
+})
+
+test('shortcuts are labelled the way each system shows them', () => {
+  assert.equal(shortcutLabel('CommandOrControl+Alt+R', 'win32'), 'Ctrl+Alt+R')
+  assert.equal(shortcutLabel('CommandOrControl+Alt+R', 'darwin'), '⌘⌥R')
 })

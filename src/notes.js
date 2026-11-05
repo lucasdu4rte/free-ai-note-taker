@@ -62,3 +62,19 @@ export function parseTranscript(text = '') {
       return match ? { time: match[1], text: match[2] } : { time: '', text: line.trim() }
     })
 }
+
+const MAC_SYMBOLS = { CommandOrControl: '⌘', Alt: '⌥', Shift: '⇧' }
+
+export function shortcutLabel(accelerator, platform) {
+  const parts = accelerator.split('+')
+  if (platform === 'darwin') return parts.map((part) => MAC_SYMBOLS[part] ?? part).join('')
+  return parts.map((part) => (part === 'CommandOrControl' ? 'Ctrl' : part)).join('+')
+}
+
+// A global shortcut needs Ctrl/⌘ or Alt, otherwise it would swallow that key in every other app.
+export function acceleratorFromKey({ code, ctrlKey, metaKey, altKey, shiftKey }) {
+  const key = code.match(/^(?:Key|Digit)(\w)$/)?.[1] ?? code.match(/^F\d{1,2}$/)?.[0]
+  if (!key || !(ctrlKey || metaKey || altKey)) return null
+  const modifiers = [ctrlKey || metaKey ? 'CommandOrControl' : '', altKey ? 'Alt' : '', shiftKey ? 'Shift' : '']
+  return [...modifiers.filter(Boolean), key].join('+')
+}

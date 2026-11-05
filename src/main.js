@@ -6,7 +6,7 @@ import electronUpdater from 'electron-updater'
 import { DEFAULT_SETTINGS, LLM_PRESETS, withSettingsDefaults } from './presets.js'
 import { FILES, completedSteps, processMeeting, readIfExists, testTranscription } from './pipeline.js'
 import { testLlm } from './llm.js'
-import { parseSummary, summaryPreview, toggleTask } from './notes.js'
+import { parseSummary, shortcutLabel, summaryPreview, toggleTask } from './notes.js'
 import { HEADER_BYTES, SAMPLE_RATE, floatToInt16, repairWavHeader, wavHeader } from './wav.js'
 
 // Chromium's network stack honours the Windows proxy/PAC settings that corporate networks rely on.
@@ -14,14 +14,14 @@ globalThis.fetch = net.fetch
 
 const MEETING_ID = /^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/
 // Ctrl+Shift+R would steal the browsers' hard-reload shortcut system-wide.
-const SHORTCUT = 'CommandOrControl+Alt+R'
-const SHORTCUT_LABEL = process.platform === 'darwin' ? '⌘⌥R' : 'Ctrl+Alt+R'
+const DEFAULT_SHORTCUT = 'CommandOrControl+Alt+R'
 const OVERLAY_SIZE = { width: 640, height: 112, bottomMargin: 24 }
 const MAX_TITLE_LENGTH = 120
 
 const notesDir = () => path.join(app.getPath('documents'), 'Free AI Note Taker')
 const modelsDir = () => path.join(app.getPath('userData'), 'models')
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
+const shortcutFile = () => path.join(app.getPath('userData'), 'shortcut.txt')
 const preload = path.join(import.meta.dirname, 'preload.cjs')
 
 function meetingDir(id) {
@@ -231,8 +231,30 @@ app.whenReady().then(() => {
 
   if (app.isPackaged) checkForUpdates()
 
-  const shortcutRegistered = globalShortcut.register(SHORTCUT, () => win.webContents.send('recording:toggle'))
-  ipcMain.handle('app:shortcut', () => (shortcutRegistered ? SHORTCUT_LABEL : null))
+  registerShortcut(readIfExists(shortcutFile())?.trim() || DEFAULT_SHORTCUT)
+})
+
+let shortcut = null
+
+function registerShortcut(accelerator) {
+  if (!globalShortcut.register(accelerator, () => win.webContents.send('recording:toggle'))) return false
+  shortcut = accelerator
+  return true
+}
+
+const currentShortcut = () => (shortcut ? shortcutLabel(shortcut, process.platform) : null)
+
+ipcMain.handle('app:shortcut', currentShortcut)
+// Paused while the user presses a new combination, so pressing the current one does not start a recording.
+ipcMain.handle('app:shortcut-pause', () => globalShortcut.unregisterAll())
+ipcMain.handle('app:shortcut-set', (_event, accelerator) => {
+  const previous = shortcut
+  if (accelerator && registerShortcut(accelerator)) {
+    fs.writeFileSync(shortcutFile(), accelerator)
+    return { label: currentShortcut() }
+  }
+  if (previous) registerShortcut(previous)
+  return { label: currentShortcut(), taken: Boolean(accelerator) }
 })
 
 app.on('will-quit', () => globalShortcut.unregisterAll())
