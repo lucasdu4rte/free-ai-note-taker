@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import electronUpdater from 'electron-updater'
-import { DEFAULT_SETTINGS, LLM_PRESETS } from './presets.js'
+import { DEFAULT_SETTINGS, LLM_PRESETS, withSettingsDefaults } from './presets.js'
 import { FILES, completedSteps, processMeeting, readIfExists, testTranscription } from './pipeline.js'
 import { testLlm } from './llm.js'
 import { parseSummary, summaryPreview, toggleTask } from './notes.js'
@@ -43,21 +43,22 @@ function meetingInfo(id) {
   }
 }
 
+const configsWithKeys = (settings) => [settings.transcription, settings.llm, ...settings.llmFallbacks]
+
 async function loadSettings() {
   const saved = JSON.parse(readIfExists(settingsFile()) ?? 'null')
   if (!saved) return DEFAULT_SETTINGS
-  for (const section of ['transcription', 'llm']) {
-    const { apiKey } = saved[section]
-    saved[section].apiKey = apiKey ? (await safeStorage.decryptStringAsync(Buffer.from(apiKey, 'base64'))).result : ''
+  const settings = withSettingsDefaults(saved)
+  for (const config of configsWithKeys(settings)) {
+    config.apiKey = config.apiKey ? (await safeStorage.decryptStringAsync(Buffer.from(config.apiKey, 'base64'))).result : ''
   }
-  return saved
+  return settings
 }
 
 async function saveSettings(settings) {
-  const stored = structuredClone(settings)
-  for (const section of ['transcription', 'llm']) {
-    const { apiKey } = stored[section]
-    stored[section].apiKey = apiKey ? (await safeStorage.encryptStringAsync(apiKey)).toString('base64') : ''
+  const stored = withSettingsDefaults(structuredClone(settings))
+  for (const config of configsWithKeys(stored)) {
+    config.apiKey = config.apiKey ? (await safeStorage.encryptStringAsync(config.apiKey)).toString('base64') : ''
   }
   fs.mkdirSync(path.dirname(settingsFile()), { recursive: true })
   fs.writeFileSync(settingsFile(), JSON.stringify(stored, null, 2))

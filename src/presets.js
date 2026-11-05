@@ -14,7 +14,8 @@ export const TRANSCRIPTION_PRESETS = {
 export const LLM_PRESETS = {
   gemini: { label: 'Google Gemini', baseURL: GEMINI_URL, model: 'gemini-3.8-flash' },
   anthropic: { label: 'Anthropic', baseURL: 'https://api.anthropic.com', model: 'claude-haiku-5-5' },
-  ollama: { label: 'Ollama', baseURL: 'http://localhost:11434/v1', model: 'gemma3:4b' },
+  // A model running on the CPU can take minutes per block.
+  ollama: { label: 'Ollama', baseURL: 'http://localhost:11434/v1', model: 'gemma3:4b', timeoutSeconds: '0' },
   groq: { label: 'Groq', baseURL: GROQ_URL, model: 'openai/gpt-oss-120b' },
   openai: { label: 'OpenAI', baseURL: OPENAI_URL, model: 'gpt-5.4-mini' },
   custom: { label: 'OpenAI Compatível', baseURL: '', model: '' },
@@ -26,7 +27,18 @@ export function fromPreset(presets, provider) {
   return { provider, apiKey: '', ...config }
 }
 
+// timeoutSeconds '0' means no limit. A saved provider missing from the presets must not stop the settings from loading.
+const withTimeout = (config) => ({ timeoutSeconds: LLM_PRESETS[config.provider]?.timeoutSeconds ?? '30', ...config })
+
+export const llmFromPreset = (provider) => withTimeout(fromPreset(LLM_PRESETS, provider))
+
 export const DEFAULT_SETTINGS = {
   transcription: fromPreset(TRANSCRIPTION_PRESETS, 'local'),
-  llm: fromPreset(LLM_PRESETS, 'gemini'),
+  llm: llmFromPreset('gemini'),
+  llmFallbacks: [],
+}
+
+// Settings saved before reserves existed have neither reserves nor a time limit.
+export function withSettingsDefaults(saved) {
+  return { ...saved, llm: withTimeout(saved.llm), llmFallbacks: (saved.llmFallbacks ?? []).map(withTimeout) }
 }

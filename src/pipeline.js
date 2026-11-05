@@ -4,7 +4,7 @@ import path from 'node:path'
 import sherpa from 'sherpa-onnx-node'
 import { LOCAL_ASR_MODELS, VAD_MODEL, ensureModels } from './models.js'
 import { speechSegments, transcribeCloud, transcribeLocal } from './transcribe.js'
-import { cleanTranscript, summarize, withTestLimits } from './llm.js'
+import { cleanTranscript, completeWithFallback, summarize, withTestLimits } from './llm.js'
 import { repairWavHeader } from './wav.js'
 import { STEPS } from './notes.js'
 
@@ -27,14 +27,15 @@ export async function processMeeting(dir, settings, modelsDir, onProgress = () =
   if (!STEPS.includes(from)) throw new Error(`Etapa inválida: ${from}`)
   const file = (name) => path.join(dir, name)
   const read = (step) => fs.readFileSync(file(STEP_OUTPUTS[step]), 'utf8')
+  const complete = completeWithFallback([settings.llm, ...settings.llmFallbacks])
   const run = {
     transcribe: async (report) => {
       const raw = await transcribe(file(FILES.audio), settings.transcription, modelsDir, report)
       if (!raw) throw new Error('Nenhuma fala foi detectada no áudio.')
       return raw
     },
-    clean: (report) => cleanTranscript(read('transcribe'), settings.llm, report),
-    summarize: () => summarize(read('clean'), settings.llm),
+    clean: (report) => cleanTranscript(read('transcribe'), complete, report),
+    summarize: (report) => summarize(read('clean'), complete, report),
   }
   for (const step of STEPS.slice(STEPS.indexOf(from))) {
     onProgress(step)

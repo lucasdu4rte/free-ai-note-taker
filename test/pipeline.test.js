@@ -9,7 +9,7 @@ import { LOCAL_ASR_MODELS, downloadFile, ensureModels } from '../src/models.js'
 import { FILES, completedSteps, formatTime, processMeeting, testTranscription } from '../src/pipeline.js'
 import { STEPS } from '../src/notes.js'
 import { groupSegments, speechSegments, transcribeLocal } from '../src/transcribe.js'
-import { postJson, splitIntoBlocks, summarize, testLlm } from '../src/llm.js'
+import { cleanTranscript, completeWithFallback, postJson, splitIntoBlocks, summarize, testLlm } from '../src/llm.js'
 import { encodeWav, repairWavHeader, wavHeader } from '../src/wav.js'
 
 const FIXTURE = path.join(import.meta.dirname, '..', 'src', 'sample.wav')
@@ -116,7 +116,7 @@ test('a meeting goes from audio to transcript and summary with cloud providers',
   const provider = { provider: 'custom', baseURL: server.url, apiKey: 'secret', model: 'm', mode: 'transcriptions' }
 
   const reportedSteps = new Set()
-  await processMeeting(dir, { transcription: provider, llm: provider }, MODELS_DIR, (step) => reportedSteps.add(step))
+  await processMeeting(dir, { transcription: provider, llm: provider, llmFallbacks: [] }, MODELS_DIR, (step) => reportedSteps.add(step))
 
   assert.match(fs.readFileSync(path.join(dir, FILES.rawTranscript), 'utf8'), /^\[00:0\d\] bom dia pessoal$/)
   assert.equal(fs.readFileSync(path.join(dir, FILES.transcript), 'utf8'), 'Bom dia, pessoal.')
@@ -140,7 +140,7 @@ test('a failed step can be retried on its own', async () => {
   })
   const dir = tmp()
   fs.writeFileSync(path.join(dir, FILES.rawTranscript), '[00:01] bom dia')
-  const settings = { llm: { provider: 'custom', baseURL: server.url, model: 'm' } }
+  const settings = { llm: { provider: 'custom', baseURL: server.url, model: 'm' }, llmFallbacks: [] }
 
   await assert.rejects(processMeeting(dir, settings, MODELS_DIR, () => {}, 'clean'), /HTTP 400: high demand/)
   assert.deepEqual(completedSteps(dir), ['transcribe', 'clean'])
@@ -190,7 +190,7 @@ test('summaries can be written by Claude through the Anthropic API', async () =>
   })
   const config = { provider: 'anthropic', baseURL: server.url, apiKey: 'sk-ant-test', model: 'claude-haiku-5-5' }
 
-  assert.equal(await summarize('[00:01] bom dia', config), '## Resumo\nOk.')
+  assert.equal(await summarize('[00:01] bom dia', completeWithFallback([config])), '## Resumo\nOk.')
 
   assert.equal(request.url, '/v1/messages')
   assert.ok([request.headers.authorization, request.headers['x-api-key']].some((h) => h?.includes('sk-ant-test')))
@@ -224,8 +224,60 @@ test('a Claude refusal is reported instead of saved as a summary', async () => {
   })
   const config = { provider: 'anthropic', baseURL: server.url, apiKey: 'k', model: 'claude-haiku-5-5' }
 
-  await assert.rejects(summarize('texto', config), /recusou.*cyber/)
+  await assert.rejects(summarize('texto', completeWithFallback([config])), /recusou.*cyber/)
   server.close()
+})
+
+test('a failing service hands the rest of the meeting to the reserve', async () => {
+  let primaryCalls = 0
+  const primary = await fakeApi((_req, res) => {
+    primaryCalls++
+    res.writeHead(503).end(JSON.stringify({ error: { message: 'high demand' } }))
+  })
+  const reserve = await fakeApi(async (req, res) => {
+    await readBody(req)
+    res.end(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }))
+  })
+  const complete = completeWithFallback([
+    { provider: 'custom', baseURL: primary.url, model: 'principal' },
+    { provider: 'custom', baseURL: reserve.url, model: 'reserva' },
+  ])
+  const statuses = []
+
+  const twoBlocks = `${'a'.repeat(4000)}\n${'b'.repeat(4000)}`
+  assert.equal(await cleanTranscript(twoBlocks, complete, (status) => statuses.push(status)), 'ok\nok')
+
+  assert.equal(primaryCalls, 1)
+  assert.deepEqual(statuses, ['Revisando o texto 1/2 · principal', 'Revisando o texto 1/2 · reserva (reserva)', 'Revisando o texto 2/2 · reserva (reserva)'])
+  primary.close()
+  reserve.close()
+})
+
+test('when every service fails the error names each one', async () => {
+  const down = await fakeApi((_req, res) => res.writeHead(503).end(JSON.stringify({ error: { message: 'high demand' } })))
+  const badKey = await fakeApi((_req, res) => res.writeHead(401).end(JSON.stringify({ error: { message: 'invalid key' } })))
+  const complete = completeWithFallback([
+    { provider: 'custom', baseURL: down.url, model: 'principal' },
+    { provider: 'custom', baseURL: badKey.url, model: 'reserva' },
+  ])
+
+  await assert.rejects(summarize('texto', complete), /principal: .*HTTP 503: high demand · reserva: .*HTTP 401: invalid key/)
+  down.close()
+  badKey.close()
+})
+
+test('a service that does not answer in its time limit hands over to the reserve, and Ilimitado waits', async () => {
+  const silent = await fakeApi(() => {})
+  const slow = await fakeApi((_req, res) => setTimeout(() => res.end(JSON.stringify({ choices: [{ message: { content: 'devagar' } }] })), 200))
+  const complete = completeWithFallback([
+    { provider: 'custom', baseURL: silent.url, model: 'principal', timeoutSeconds: '0.1' },
+    { provider: 'custom', baseURL: slow.url, model: 'reserva', timeoutSeconds: '0' },
+  ])
+
+  assert.equal(await summarize('texto', complete), 'devagar')
+  silent.closeAllConnections()
+  silent.close()
+  slow.close()
 })
 
 function claudeMessage(content) {

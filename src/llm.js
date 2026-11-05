@@ -28,19 +28,44 @@ const MAX_RETRIES = 3
 // The settings test should answer fast with the real error instead of sitting through rate-limit retries.
 const TEST_LIMITS = { retries: 0, timeoutMs: 30_000 }
 
-export async function cleanTranscript(transcript, config, onStatus) {
+export async function cleanTranscript(transcript, complete, onStatus) {
   const blocks = splitIntoBlocks(transcript, CLEANUP_BLOCK_CHARS)
   const cleaned = []
   for (const [i, block] of blocks.entries()) {
-    onStatus(`Revisando o texto ${i + 1}/${blocks.length}`)
-    cleaned.push(await complete(config, CLEANUP_PROMPT, block))
+    cleaned.push(await complete(CLEANUP_PROMPT, block, `Revisando o texto ${i + 1}/${blocks.length}`, onStatus))
   }
   return cleaned.join('\n')
 }
 
-export function summarize(transcript, config) {
-  return complete(config, SUMMARY_PROMPT, transcript)
+export function summarize(transcript, complete, onStatus) {
+  return complete(SUMMARY_PROMPT, transcript, 'Gerando o resumo', onStatus)
 }
+
+// The meeting stays on the service that answered, so a service that is down is not tried again for every block.
+export function completeWithFallback(configs) {
+  let active = 0
+  const failures = []
+  return async (system, text, label, onStatus = () => {}) => {
+    for (; active < configs.length; active++) {
+      const config = configs[active]
+      const isLast = active === configs.length - 1
+      onStatus(`${label} · ${config.model}${active ? ' (reserva)' : ''}`)
+      try {
+        return await complete(withRequestLimits(config, isLast), system, text)
+      } catch (error) {
+        failures.push(`${config.model}: ${error.message}`)
+        if (isLast) throw new Error(failures.join(' · '))
+      }
+    }
+  }
+}
+
+// With a reserve next in line, a failing service hands over at once instead of ~60 s of backoff.
+const withRequestLimits = (config, isLast) => ({
+  ...config,
+  retries: isLast ? MAX_RETRIES : 0,
+  timeoutMs: Number(config.timeoutSeconds) * 1000 || undefined,
+})
 
 export const withTestLimits = (config) => ({ ...config, ...TEST_LIMITS })
 
