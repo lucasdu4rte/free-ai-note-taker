@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; media-src file:" />
     <title>Free AI Note Taker</title>
     <style>
       :root {
@@ -104,6 +104,7 @@
       .status-line { flex-shrink: 0; margin: 0 20px 10px; font-size: 12px; color: var(--muted); }
       .status-line:empty { display: none; }
       .status-line.error { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--warn); background: var(--group); color: var(--text); }
+      #player { flex-shrink: 0; width: calc(100% - 40px); height: 36px; margin: 0 20px 12px; }
       .segmented { flex-shrink: 0; align-self: flex-start; display: inline-flex; gap: 2px; margin: 0 20px 12px; padding: 2px; border-radius: 8px; background: var(--group); }
       .seg { min-height: 28px; padding: 0 14px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
       .seg.on { background: var(--seg-on); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15); }
@@ -196,6 +197,7 @@
               </button>
             </header>
             <p id="meeting-status" class="status-line" role="status"></p>
+            <audio id="player" controls preload="metadata" aria-label="Áudio da reunião" hidden></audio>
             <div class="segmented" role="tablist" aria-label="Conteúdo da reunião">
               <button id="tab-summary" class="seg on" role="tab" aria-selected="true" aria-controls="panel-summary">Resumo</button>
               <button id="tab-transcript" class="seg" role="tab" aria-selected="false" aria-controls="panel-transcript">Transcrição</button>

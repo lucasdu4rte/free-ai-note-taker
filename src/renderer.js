@@ -181,17 +181,26 @@ async function showMeeting(id) {
   const meeting = meetings.find((m) => m.id === id)
   if (!meeting) return
   selectedId = id
-  const { summary, transcript } = await api.readMeeting(id)
+  const { summary, transcript, audioUrl } = await api.readMeeting(id)
   summaryText = summary
   $('#meeting').hidden = false
   $('#title').textContent = titleOf(meeting)
   $('#meta').textContent = `${formatWhen(id)} · ${meeting.minutes} min`
   $('#copy').disabled = !summary
   renderMeetingStatus()
+  renderPlayer(audioUrl)
   renderSummary(id, summary)
   renderTranscript(transcript)
   renderTab()
   renderList()
+}
+
+function renderPlayer(audioUrl) {
+  const player = $('#player')
+  player.hidden = !audioUrl
+  if (!audioUrl) return player.removeAttribute('src')
+  // Reassigning the same URL would restart the audio when the meeting view refreshes after processing.
+  if (player.getAttribute('src') !== audioUrl) player.src = audioUrl
 }
 
 function renderMeetingStatus() {

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, nativeTheme, net, safeStorage, screen, session, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { DEFAULT_SETTINGS, LLM_PRESETS } from './presets.js'
 import { FILES, processMeeting, readIfExists, testTranscription } from './pipeline.js'
 import { testLlm } from './llm.js'
@@ -165,7 +166,12 @@ ipcMain.handle('meetings:list', () => {
 
 ipcMain.handle('meeting:read', (_event, id) => {
   const file = (name) => readIfExists(path.join(meetingDir(id), name))
-  return { summary: file(FILES.summary), transcript: file(FILES.transcript) ?? file(FILES.rawTranscript) }
+  const audio = path.join(meetingDir(id), FILES.audio)
+  return {
+    summary: file(FILES.summary),
+    transcript: file(FILES.transcript) ?? file(FILES.rawTranscript),
+    audioUrl: fs.existsSync(audio) ? pathToFileURL(audio).href : undefined,
+  }
 })
 
 ipcMain.handle('meeting:toggle-task', (_event, id, index, done) => {
