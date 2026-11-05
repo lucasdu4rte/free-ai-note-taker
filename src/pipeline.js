@@ -11,6 +11,7 @@ export const FILES = {
   rawTranscript: 'transcricao-bruta.md',
   transcript: 'transcricao.md',
   summary: 'resumo.md',
+  title: 'titulo.txt',
 }
 
 export async function processMeeting(dir, settings, modelsDir, onStatus = () => {}) {

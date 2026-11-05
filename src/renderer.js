@@ -147,6 +147,8 @@ function previewOf(meeting) {
   return meeting.preview || 'Sem resumo ainda'
 }
 
+const selectedMeeting = () => meetings.find((m) => m.id === selectedId)
+
 async function refreshList() {
   meetings = await api.listMeetings()
   renderList()
@@ -337,6 +339,18 @@ const selectTab = (name) => () => {
 $('#tab-summary').onclick = selectTab('summary')
 $('#tab-transcript').onclick = selectTab('transcript')
 $('#process').onclick = () => processMeeting(selectedId)
+$('#title').onkeydown = (event) => {
+  if (event.key === 'Enter') event.preventDefault()
+  if (event.key === 'Escape') $('#title').textContent = titleOf(selectedMeeting())
+  if (event.key === 'Enter' || event.key === 'Escape') $('#title').blur()
+}
+$('#title').onblur = async () => {
+  const name = $('#title').textContent.trim()
+  if (name === titleOf(selectedMeeting())) return
+  await api.renameMeeting(selectedId, name)
+  await refreshList()
+  $('#title').textContent = titleOf(selectedMeeting())
+}
 $('#open-folder').onclick = () => api.openMeeting(selectedId)
 $('#copy').onclick = async () => {
   await navigator.clipboard.writeText(summaryText)

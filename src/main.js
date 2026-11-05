@@ -15,6 +15,7 @@ const SHORTCUT = 'CommandOrControl+Alt+R'
 const SHORTCUT_LABEL = process.platform === 'darwin' ? '⌘⌥R' : 'Ctrl+Alt+R'
 const OVERLAY_SIZE = { width: 640, height: 112, bottomMargin: 24 }
 const OVERLAY_LINGER_MS = 8000
+const MAX_TITLE_LENGTH = 120
 
 const notesDir = () => path.join(app.getPath('documents'), 'Free AI Note Taker')
 const modelsDir = () => path.join(app.getPath('userData'), 'models')
@@ -28,11 +29,12 @@ function meetingDir(id) {
 
 function meetingInfo(id) {
   const summary = readIfExists(path.join(meetingDir(id), FILES.summary))
+  const customTitle = readIfExists(path.join(meetingDir(id), FILES.title))
   const audio = path.join(meetingDir(id), FILES.audio)
   const seconds = fs.existsSync(audio) ? (fs.statSync(audio).size - HEADER_BYTES) / (SAMPLE_RATE * 2) : 0
   return {
     id,
-    title: parseSummary(summary).title,
+    title: customTitle || parseSummary(summary).title,
     preview: summaryPreview(summary),
     minutes: Math.max(1, Math.round(seconds / 60)),
     hasSummary: summary !== undefined,
@@ -168,6 +170,14 @@ ipcMain.handle('meeting:read', (_event, id) => {
 ipcMain.handle('meeting:toggle-task', (_event, id, index, done) => {
   const file = path.join(meetingDir(id), FILES.summary)
   fs.writeFileSync(file, toggleTask(fs.readFileSync(file, 'utf8'), index, done))
+})
+
+// The rename lives in its own file so reprocessing, which rewrites the summary, keeps the name the user chose.
+ipcMain.handle('meeting:rename', (_event, id, title) => {
+  const file = path.join(meetingDir(id), FILES.title)
+  const name = String(title).replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE_LENGTH)
+  if (!name) return fs.rmSync(file, { force: true })
+  fs.writeFileSync(file, name)
 })
 
 ipcMain.handle('meeting:open', (_event, id) => shell.openPath(meetingDir(id)))

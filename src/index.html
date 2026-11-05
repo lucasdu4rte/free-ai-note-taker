@@ -95,7 +95,9 @@
       .detail { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
       #meeting { flex-grow: 1; min-height: 0; display: flex; flex-direction: column; }
       .detail-head { flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 14px 20px 10px; }
-      .detail-head h1 { font-size: 18px; line-height: 24px; font-weight: 600; }
+      .detail-head h1 { font-size: 18px; line-height: 24px; font-weight: 600; margin: 0 -6px; padding: 0 6px; border-radius: 6px; cursor: text; }
+      .detail-head h1:hover { background: var(--hover); }
+      .detail-head h1:focus { outline: 2px solid var(--accent); outline-offset: 0; background: var(--bg); }
       .detail-head p { margin-top: 2px; font-size: 12px; }
       .icon-btn { width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); display: flex; align-items: center; justify-content: center; }
       .icon-btn:hover { background: var(--hover); color: var(--text); }
@@ -123,13 +125,13 @@
       .settings { overflow-y: auto; }
       .settings-body { width: 100%; max-width: 720px; padding: 20px 28px 40px; display: flex; flex-direction: column; gap: 18px; }
       .settings-body h1 { font-size: 18px; line-height: 24px; font-weight: 600; }
-      .settings-body section { display: flex; flex-direction: column; gap: 6px; }
-      .settings-body h2 { margin: 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
       .settings-head { display: flex; align-items: center; gap: 10px; }
       .save-state { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
       .save-state::before { content: '✓'; }
       .save-state.error { color: var(--rec); background: color-mix(in srgb, var(--rec) 14%, transparent); }
       .save-state.error::before { content: '!'; }
+      .settings-body section { display: flex; flex-direction: column; gap: 6px; }
+      .settings-body h2 { margin: 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
       .group { border-radius: 10px; background: var(--group); }
       .setting { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 14px; }
       .setting:not([hidden]) ~ .setting:not([hidden]) { border-top: 1px solid var(--border); }
@@ -176,7 +178,7 @@
           <article id="meeting" hidden>
             <header class="detail-head">
               <div class="grow">
-                <h1 id="title"></h1>
+                <h1 id="title" contenteditable="plaintext-only" spellcheck="false" title="Clique para renomear"></h1>
                 <p id="meta" class="muted"></p>
               </div>
               <button id="copy" class="icon-btn" aria-label="Copiar resumo" title="Copiar resumo">

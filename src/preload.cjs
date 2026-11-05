@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('api', {
   listMeetings: () => ipcRenderer.invoke('meetings:list'),
   readMeeting: (id) => ipcRenderer.invoke('meeting:read', id),
   toggleTask: (id, index, done) => ipcRenderer.invoke('meeting:toggle-task', id, index, done),
+  renameMeeting: (id, title) => ipcRenderer.invoke('meeting:rename', id, title),
   openMeeting: (id) => ipcRenderer.invoke('meeting:open', id),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
