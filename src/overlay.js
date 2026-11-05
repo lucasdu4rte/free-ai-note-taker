@@ -3,7 +3,7 @@ const $ = (id) => document.getElementById(id)
 const BARS = 20
 const levels = new Array(BARS).fill(0)
 const bars = levels.map(() => document.createElement('span'))
-const PARTS = ['chips', 'badge', 'wave', 'progress', 'timer', 'stop', 'open']
+const PARTS = ['chips', 'badge', 'wave', 'timer', 'stop']
 let state = { phase: 'hidden' }
 let clock
 
@@ -18,20 +18,6 @@ const VIEWS = {
     const tick = () => ($('timer').textContent = new Date(Date.now() - current.startedAt).toISOString().slice(11, 19))
     tick()
     clock = setInterval(tick, 1000)
-  },
-  processing(current) {
-    show('progress')
-    setText(current.status)
-  },
-  done(current) {
-    show('open')
-    $('open').textContent = 'Abrir'
-    setText(`Ata pronta: ${current.title || 'reunião de agora'}`)
-  },
-  error(current) {
-    show('open')
-    $('open').textContent = 'Ver'
-    setText(`A ata falhou: ${current.status}`)
   },
   hidden() {},
 }
@@ -59,7 +45,6 @@ overlay.onLevel((level) => {
 })
 
 $('stop').onclick = () => overlay.stop()
-$('open').onclick = () => overlay.openMeeting(state.id)
 $('chip-sources').onclick = () => overlay.openSettings()
 $('chip-llm').onclick = () => overlay.openSettings()
 

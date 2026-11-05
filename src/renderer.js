@@ -408,11 +408,6 @@ $('#copy').onclick = async () => {
 api.onStatus(setStatus)
 api.onToggleRecording(toggleRecording)
 api.onShowSettings(() => showView('settings'))
-api.onShowMeeting(async (id) => {
-  showView('meetings')
-  await refreshList()
-  await showMeeting(id)
-})
 
 const settings = await api.getSettings()
 writeSection('transcription', settings.transcription)

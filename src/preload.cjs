@@ -24,7 +24,6 @@ contextBridge.exposeInMainWorld('api', {
   installUpdate: () => ipcRenderer.send('update:install'),
   onStatus: on('status'),
   onToggleRecording: on('recording:toggle'),
-  onShowMeeting: on('meeting:show'),
   onShowSettings: on('settings:show'),
 
   overlay: {
@@ -32,7 +31,6 @@ contextBridge.exposeInMainWorld('api', {
     onState: on('overlay:state'),
     onLevel: on('overlay:level'),
     stop: () => ipcRenderer.send('overlay:stop'),
-    openMeeting: (id) => ipcRenderer.send('overlay:open-meeting', id),
     openSettings: () => ipcRenderer.send('overlay:open-settings'),
   },
 })

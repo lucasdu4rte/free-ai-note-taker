@@ -17,7 +17,6 @@ const MEETING_ID = /^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/
 const SHORTCUT = 'CommandOrControl+Alt+R'
 const SHORTCUT_LABEL = process.platform === 'darwin' ? '⌘⌥R' : 'Ctrl+Alt+R'
 const OVERLAY_SIZE = { width: 640, height: 112, bottomMargin: 24 }
-const OVERLAY_LINGER_MS = 8000
 const MAX_TITLE_LENGTH = 120
 
 const notesDir = () => path.join(app.getPath('documents'), 'Free AI Note Taker')
@@ -67,7 +66,6 @@ async function saveSettings(settings) {
 let win
 let overlay
 let overlayState = { phase: 'hidden' }
-let hideOverlayTimer
 let recording = null
 
 function createOverlay() {
@@ -93,22 +91,20 @@ function createOverlay() {
 }
 
 function showOverlay(state) {
-  clearTimeout(hideOverlayTimer)
   overlayState = state
   overlay.webContents.send('overlay:state', state)
   // showInactive keeps the focus on Teams instead of jumping to the overlay.
   if (!overlay.isVisible()) overlay.showInactive()
-  if (state.phase === 'done' || state.phase === 'error') hideOverlayTimer = setTimeout(hideOverlay, OVERLAY_LINGER_MS)
 }
 
 function hideOverlay() {
-  clearTimeout(hideOverlayTimer)
   overlayState = { phase: 'hidden' }
+  // A hidden window keeps running, so the recording view's timer has to be told to stop.
+  overlay.webContents.send('overlay:state', overlayState)
   overlay.hide()
 }
 
 function focusMainWindow(channel, ...args) {
-  hideOverlay()
   if (win.isMinimized()) win.restore()
   win.show()
   win.focus()
@@ -142,23 +138,13 @@ ipcMain.handle('recording:stop', () => {
   recording = null
   fs.closeSync(fd)
   repairWavHeader(path.join(meetingDir(id), FILES.audio))
-  showOverlay({ phase: 'processing', status: 'Preparando o áudio' })
+  hideOverlay()
   return id
 })
 
-ipcMain.handle('meeting:process', async (event, id) => {
-  const report = (status) => {
-    event.sender.send('status', id, status)
-    showOverlay({ phase: 'processing', status })
-  }
-  try {
-    await processMeeting(meetingDir(id), await loadSettings(), modelsDir(), report)
-  } catch (error) {
-    showOverlay({ phase: 'error', id, status: error.message })
-    throw error
-  }
-  showOverlay({ phase: 'done', id, title: meetingInfo(id).title })
-})
+ipcMain.handle('meeting:process', async (event, id) =>
+  processMeeting(meetingDir(id), await loadSettings(), modelsDir(), (status) => event.sender.send('status', id, status)),
+)
 
 ipcMain.handle('meetings:list', () => {
   fs.mkdirSync(notesDir(), { recursive: true })
@@ -199,7 +185,6 @@ ipcMain.handle('settings:test', (event, section, config) => {
 
 ipcMain.handle('overlay:get-state', () => overlayState)
 ipcMain.on('overlay:stop', () => win.webContents.send('recording:toggle'))
-ipcMain.on('overlay:open-meeting', (_event, id) => focusMainWindow('meeting:show', id))
 ipcMain.on('overlay:open-settings', () => focusMainWindow('settings:show'))
 
 // Updates come from this repo's GitHub Releases (latest.yml). A downloaded update installs when the app quits,

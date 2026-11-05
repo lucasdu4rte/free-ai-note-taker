@@ -22,14 +22,11 @@
       .text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
       .text span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .muted { color: #a3a3a8; }
-      .progress { height: 3px; border-radius: 2px; background: #2c2c30; overflow: hidden; }
-      .progress span { display: block; width: 35%; height: 3px; background: #6ea2ff; animation: slide 1.2s ease-in-out infinite; }
       .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
       .action { min-height: 34px; padding: 0 14px; border: 0; border-radius: 10px; background: #f2f2f2; color: #0c0c0d; font-weight: 600; }
       .action.stop { background: #ff5a52; }
       @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-      @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
-      @media (prefers-reduced-motion: reduce) { .badge, .progress span { animation: none; } .wave span { transition: none; } }
+      @media (prefers-reduced-motion: reduce) { .badge { animation: none; } .wave span { transition: none; } }
     </style>
   </head>
   <body>
@@ -46,11 +43,9 @@
         <span id="wave" class="wave" aria-hidden="true" hidden></span>
         <div class="text">
           <span id="text" role="status"></span>
-          <div id="progress" class="progress" aria-hidden="true" hidden><span></span></div>
         </div>
         <span id="timer" class="timer" role="timer" aria-label="Tempo de gravação" hidden></span>
         <button id="stop" class="action stop" hidden>Parar</button>
-        <button id="open" class="action" hidden>Abrir</button>
       </div>
     </div>
     <script type="module" src="overlay.js"></script>
