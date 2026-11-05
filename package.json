@@ -47,5 +47,6 @@
   },
   "allowScripts": {
     "electron@45.0.0": true
-  }
+  },
+  "license": "MIT"
 }
