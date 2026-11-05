@@ -10,6 +10,8 @@ Grava reuniões do Teams (ou Meet, Zoom, qualquer áudio do PC), transcreve e ge
 
 Cada reunião vira uma pasta em `Documentos\Free AI Note Taker\<data hora>\` com `audio.wav`, `transcricao-bruta.md`, `transcricao.md` e `resumo.md` (e `titulo.txt`, se você renomear a reunião clicando no título). A reunião mostra o andamento de cada etapa (transcrição, revisão do texto e resumo). Se uma falhar (cota do plano grátis da IA, por exemplo), o erro aparece nela e **Tentar de novo** refaz só essa etapa e as seguintes, reaproveitando o que já ficou pronto.
 
+Nas configurações dá para adicionar IAs reserva, que assumem o resto da reunião se a principal falhar ou passar do tempo limite (30 s por padrão, sem limite no Ollama), e reuniões longas são resumidas em partes de uns 15 minutos que depois viram uma única ata.
+
 ## Serviços suportados
 
 | Etapa | Opção | Custo |

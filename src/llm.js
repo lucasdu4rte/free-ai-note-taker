@@ -23,7 +23,13 @@ const SUMMARY_PROMPT = `Você escreve atas de reunião. A partir da transcriçã
 
 Use só o que está na transcrição. Omita seções sem conteúdo.`
 
+const NOTES_PROMPT = `Você recebe uma parte da transcrição de uma reunião longa, com marcações de tempo [mm:ss].
+Anote em Markdown, no idioma da reunião, só o que aparece nesta parte: assuntos, decisões, tarefas (com responsável e prazo quando mencionados) e números citados.
+Seja breve, sem título nem introdução.`
+
 const CLEANUP_BLOCK_CHARS = 6000
+// About 15 minutes of talk: keeps every request under Groq's free per-minute token cap, small local context windows and the 30 s default limit.
+const SUMMARY_BLOCK_CHARS = 12_000
 const MAX_RETRIES = 3
 // The settings test should answer fast with the real error instead of sitting through rate-limit retries.
 const TEST_LIMITS = { retries: 0, timeoutMs: 30_000 }
@@ -37,8 +43,14 @@ export async function cleanTranscript(transcript, complete, onStatus) {
   return cleaned.join('\n')
 }
 
-export function summarize(transcript, complete, onStatus) {
-  return complete(SUMMARY_PROMPT, transcript, 'Gerando o resumo', onStatus)
+export async function summarize(transcript, complete, onStatus) {
+  const blocks = splitIntoBlocks(transcript, SUMMARY_BLOCK_CHARS)
+  if (blocks.length <= 1) return complete(SUMMARY_PROMPT, transcript, 'Gerando o resumo', onStatus)
+  const notes = []
+  for (const [i, block] of blocks.entries()) {
+    notes.push(await complete(NOTES_PROMPT, block, `Resumindo a parte ${i + 1}/${blocks.length}`, onStatus))
+  }
+  return complete(SUMMARY_PROMPT, notes.join('\n\n'), 'Juntando o resumo', onStatus)
 }
 
 // The meeting stays on the service that answered, so a service that is down is not tried again for every block.

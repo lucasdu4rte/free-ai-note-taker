@@ -280,6 +280,26 @@ test('a service that does not answer in its time limit hands over to the reserve
   slow.close()
 })
 
+test('a long meeting is summarized in parts that are then joined', async () => {
+  const requests = []
+  const isNotes = (messages) => messages[0].content.includes('parte da transcrição')
+  const server = await fakeApi(async (req, res) => {
+    const { messages } = JSON.parse(await readBody(req))
+    requests.push(messages)
+    res.end(JSON.stringify({ choices: [{ message: { content: isNotes(messages) ? `notas ${requests.length}` : '## Resumo\nReunião longa.' } }] }))
+  })
+  const line = (i) => `[${formatTime(i * 10)}] ${'fala '.repeat(30)}`
+  const transcript = Array.from({ length: 150 }, (_, i) => line(i)).join('\n')
+
+  const summary = await summarize(transcript, completeWithFallback([{ provider: 'custom', baseURL: server.url, model: 'm' }]))
+
+  assert.equal(summary, '## Resumo\nReunião longa.')
+  assert.equal(requests.length, 3)
+  assert.equal(requests.filter(isNotes).length, 2)
+  assert.equal(requests[2][1].content, 'notas 1\n\nnotas 2')
+  server.close()
+})
+
 function claudeMessage(content) {
   return {
     id: 'msg_1',
