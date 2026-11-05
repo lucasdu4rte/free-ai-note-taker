@@ -5,6 +5,8 @@ const { api } = window
 const $ = (selector) => document.querySelector(selector)
 const PRESETS = { transcription: TRANSCRIPTION_PRESETS, llm: LLM_PRESETS }
 const FIELDS = ['provider', 'apiKey', 'model', 'baseURL', 'mode']
+const SAVE_DELAY_MS = 400
+const SAVED_BADGE_MS = 2500
 const form = $('#settings-form')
 const statuses = new Map()
 let meetings = []
@@ -13,6 +15,8 @@ let summaryText
 let tab = 'summary'
 let recording
 let toggling = false
+let saveTimer
+let saveStateTimer
 
 const captureSystemAudio = api.platform === 'win32'
 
@@ -295,13 +299,32 @@ for (const [section, presets] of Object.entries(PRESETS)) {
 }
 
 form.addEventListener('submit', (event) => event.preventDefault())
-form.addEventListener('change', async (event) => {
+async function saveForm() {
+  const settings = { transcription: readSection('transcription'), llm: readSection('llm') }
+  try {
+    await api.saveSettings(settings)
+  } catch (error) {
+    showSaveState(`Não foi possível salvar: ${error.message}`, true)
+    return
+  }
+  renderProviderLabels(settings)
+  showSaveState('Salvo')
+}
+
+function showSaveState(text, failed = false) {
+  const badge = $('#save-state')
+  badge.textContent = text
+  badge.classList.toggle('error', failed)
+  badge.hidden = false
+  clearTimeout(saveStateTimer)
+  if (!failed) saveStateTimer = setTimeout(() => (badge.hidden = true), SAVED_BADGE_MS)
+}
+
+form.addEventListener('input', (event) => {
   const [section, field] = event.target.name.split('.')
   if (field === 'provider') writeSection(section, fromPreset(PRESETS[section], event.target.value))
-  const settings = { transcription: readSection('transcription'), llm: readSection('llm') }
-  await api.saveSettings(settings)
-  renderProviderLabels(settings)
-  $('#saved').textContent = 'Salvo. As chaves ficam criptografadas pelo sistema.'
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(saveForm, SAVE_DELAY_MS)
 })
 
 $('#record').onclick = toggleRecording

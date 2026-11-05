@@ -125,6 +125,11 @@
       .settings-body h1 { font-size: 18px; line-height: 24px; font-weight: 600; }
       .settings-body section { display: flex; flex-direction: column; gap: 6px; }
       .settings-body h2 { margin: 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+      .settings-head { display: flex; align-items: center; gap: 10px; }
+      .save-state { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+      .save-state::before { content: '✓'; }
+      .save-state.error { color: var(--rec); background: color-mix(in srgb, var(--rec) 14%, transparent); }
+      .save-state.error::before { content: '!'; }
       .group { border-radius: 10px; background: var(--group); }
       .setting { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 14px; }
       .setting:not([hidden]) ~ .setting:not([hidden]) { border-top: 1px solid var(--border); }
@@ -197,7 +202,10 @@
 
       <div id="view-settings" class="view settings" hidden>
         <form id="settings-form" class="settings-body">
-          <h1>Configurações</h1>
+          <header class="settings-head">
+            <h1>Configurações</h1>
+            <span id="save-state" class="save-state" role="status" hidden></span>
+          </header>
           <section data-section="transcription">
             <h2>Transcrição</h2>
             <div class="group">
@@ -224,7 +232,7 @@
               <div class="setting"><span>Atalho para gravar e parar<small>Funciona com qualquer janela em foco</small></span><kbd id="shortcut-setting">indisponível</kbd></div>
             </div>
           </section>
-          <p id="saved" class="hint" role="status">As chaves ficam criptografadas pelo sistema. As mudanças são salvas sozinhas.</p>
+          <p class="hint">As chaves ficam criptografadas pelo sistema. As mudanças são salvas sozinhas.</p>
         </form>
       </div>
     </div>
