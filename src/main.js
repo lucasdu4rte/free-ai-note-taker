@@ -142,13 +142,15 @@ ipcMain.handle('recording:stop', () => {
   return id
 })
 
-ipcMain.handle('meeting:process', async (event, id) =>
-  processMeeting(meetingDir(id), await loadSettings(), modelsDir(), (status) => event.sender.send('status', id, status)),
-)
+ipcMain.handle('meeting:process', async (event, id) => {
+  // Processing the WAV still being written would cache a partial raw transcript for the real run after Parar.
+  if (id === recording?.id) throw new Error('Pare a gravação antes de processar esta reunião.')
+  return processMeeting(meetingDir(id), await loadSettings(), modelsDir(), (status) => event.sender.send('status', id, status))
+})
 
 ipcMain.handle('meetings:list', () => {
   fs.mkdirSync(notesDir(), { recursive: true })
-  return fs.readdirSync(notesDir()).filter((name) => MEETING_ID.test(name)).sort().reverse().map(meetingInfo)
+  return fs.readdirSync(notesDir()).filter((name) => MEETING_ID.test(name) && name !== recording?.id).sort().reverse().map(meetingInfo)
 })
 
 ipcMain.handle('meeting:read', (_event, id) => {
