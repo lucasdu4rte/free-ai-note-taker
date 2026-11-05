@@ -142,6 +142,7 @@
       .setting small { font-size: 12px; color: var(--muted); }
       .setting select, .setting input { width: 300px; min-height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
       .hint { margin: 0 4px; font-size: 12px; color: var(--muted); }
+      .setting > .version { flex-grow: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
       .setting > .secret { position: relative; display: block; flex: 0 0 300px; }
       .setting .secret input { width: 100%; padding-right: 34px; }
       .reveal { position: absolute; top: 50%; right: 3px; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; width: 26px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); }
@@ -251,6 +252,12 @@
             <h2>Gravação</h2>
             <div class="group">
               <div class="setting"><span>Atalho para gravar e parar<small>Funciona com qualquer janela em foco</small></span><kbd id="shortcut-setting">indisponível</kbd></div>
+            </div>
+          </section>
+          <section>
+            <h2>Sobre</h2>
+            <div class="group">
+              <div class="setting"><span>Versão instalada<small>As novas versões são baixadas sozinhas pelo instalador</small></span><span id="app-version" class="version"></span></div>
             </div>
           </section>
           <p class="hint">As chaves ficam criptografadas pelo sistema. As mudanças são salvas sozinhas.</p>

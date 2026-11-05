@@ -190,6 +190,7 @@ ipcMain.handle('meeting:rename', (_event, id, title) => {
 
 ipcMain.handle('meeting:open', (_event, id) => shell.openPath(meetingDir(id)))
 ipcMain.handle('settings:get', loadSettings)
+ipcMain.handle('app:version', () => app.getVersion())
 ipcMain.handle('settings:save', (_event, settings) => saveSettings(settings))
 ipcMain.handle('settings:test', (event, section, config) => {
   if (section === 'llm') return testLlm(config)

@@ -423,6 +423,7 @@ const shortcut = await api.shortcut()
 $('#shortcut').hidden = !shortcut
 $('#shortcut').textContent = shortcut ?? ''
 $('#shortcut-setting').textContent = shortcut ?? 'indisponível (outro app já usa)'
+$('#app-version').textContent = await api.version()
 
 await refreshList()
 if (meetings.length) await showMeeting(meetings[0].id)
