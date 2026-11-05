@@ -326,18 +326,20 @@ function renderLlmGroups(configs) {
 
 function llmGroup(config, index) {
   const group = $('#llm-template').content.firstElementChild.cloneNode(true)
-  group.querySelector('.llm-title').textContent = index ? `Reserva ${index}` : 'Principal'
+  nameLlmGroup(group, index)
   group.querySelector('[data-action=remove]').hidden = !index
   group.querySelector('[name=provider]').append(...providerOptions(LLM_PRESETS))
   writeConfig(group, config)
   return group
 }
 
-function changeLlmGroups(change) {
-  const configs = llmGroups().map(readConfig)
-  change(configs)
-  renderLlmGroups(configs)
-  saveSoon()
+function nameLlmGroup(group, index) {
+  const title = index ? `Reserva ${index}` : 'Principal'
+  group.ariaLabel = title
+  group.querySelector('.llm-title').textContent = title
+  const removeButton = group.querySelector('[data-action=remove]')
+  removeButton.ariaLabel = `Remover ${title.toLowerCase()}`
+  removeButton.title = removeButton.ariaLabel
 }
 
 const shortLabel = (section, provider) => PRESETS[section][provider]?.label.split(' (')[0] ?? provider
@@ -410,7 +412,11 @@ function toggleSecret(_group, button) {
 const GROUP_ACTIONS = {
   test: testGroup,
   reveal: toggleSecret,
-  remove: (group) => changeLlmGroups((configs) => configs.splice(llmGroups().indexOf(group), 1)),
+  remove: (group) => {
+    group.remove()
+    llmGroups().forEach(nameLlmGroup)
+    saveSoon()
+  },
 }
 
 form.addEventListener('click', (event) => {
@@ -427,7 +433,10 @@ form.addEventListener('input', (event) => {
   saveSoon()
 })
 
-$('#add-llm').onclick = () => changeLlmGroups((configs) => configs.push(llmFromPreset('groq')))
+$('#add-llm').onclick = () => {
+  $('#llm-groups').append(llmGroup(llmFromPreset('groq'), llmGroups().length))
+  saveSoon()
+}
 $('#record').onclick = toggleRecording
 $('#update-install').onclick = () => api.installUpdate()
 api.onUpdateReady((version) => {

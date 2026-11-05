@@ -73,7 +73,7 @@ export function completeWithFallback(configs) {
 }
 
 // With a reserve next in line, a failing service hands over at once instead of ~60 s of backoff.
-const withRequestLimits = (config, isLast) => ({
+export const withRequestLimits = (config, isLast) => ({
   ...config,
   retries: isLast ? MAX_RETRIES : 0,
   timeoutMs: Number(config.timeoutSeconds) * 1000 || undefined,

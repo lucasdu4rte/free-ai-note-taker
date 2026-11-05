@@ -9,7 +9,7 @@ import { LOCAL_ASR_MODELS, downloadFile, ensureModels } from '../src/models.js'
 import { FILES, completedSteps, formatTime, processMeeting, testTranscription } from '../src/pipeline.js'
 import { STEPS } from '../src/notes.js'
 import { groupSegments, speechSegments, transcribeLocal } from '../src/transcribe.js'
-import { cleanTranscript, completeWithFallback, postJson, splitIntoBlocks, summarize, testLlm } from '../src/llm.js'
+import { cleanTranscript, completeWithFallback, postJson, splitIntoBlocks, summarize, testLlm, withRequestLimits } from '../src/llm.js'
 import { encodeWav, repairWavHeader, wavHeader } from '../src/wav.js'
 
 const FIXTURE = path.join(import.meta.dirname, '..', 'src', 'sample.wav')
@@ -266,7 +266,12 @@ test('when every service fails the error names each one', async () => {
   badKey.close()
 })
 
-test('a service that does not answer in its time limit hands over to the reserve, and Ilimitado waits', async () => {
+test('the time limit setting becomes the request timeout, and Ilimitado sets none', () => {
+  assert.equal(withRequestLimits({ timeoutSeconds: '30' }, true).timeoutMs, 30_000)
+  assert.equal(withRequestLimits({ timeoutSeconds: '0' }, true).timeoutMs, undefined)
+})
+
+test('a service that does not answer in its time limit hands over to the reserve', async () => {
   const silent = await fakeApi(() => {})
   const slow = await fakeApi((_req, res) => setTimeout(() => res.end(JSON.stringify({ choices: [{ message: { content: 'devagar' } }] })), 200))
   const complete = completeWithFallback([
