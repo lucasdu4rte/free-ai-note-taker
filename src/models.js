@@ -13,6 +13,8 @@ const MODEL_URLS = {
   tokens: PARAKEET_V3 + 'tokens.txt',
 }
 
+const DOWNLOAD_ATTEMPTS = 4
+
 export const VAD_MODEL = ['vad']
 export const LOCAL_ASR_MODELS = ['vad', 'encoder', 'decoder', 'joiner', 'tokens']
 
@@ -24,14 +26,26 @@ export async function ensureModels(dir, names, onStatus = () => {}) {
     const file = path.join(dir, path.basename(url))
     paths[name] = file
     if (fs.existsSync(file)) continue
-    await download(url, file, (pct) => onStatus(`Baixando modelo ${path.basename(file)}: ${pct}%`))
+    await downloadFile(url, file, (pct) => onStatus(`Baixando modelo ${path.basename(file)}: ${pct}%`))
   }
   return paths
 }
 
+// GitHub and Hugging Face downloads fail with the odd 5xx or dropped connection; the user should not have to retry by hand.
+export async function downloadFile(url, file, onProgress, attempt = 1) {
+  try {
+    await download(url, file, onProgress)
+  } catch (error) {
+    const retryable = error.status === undefined || error.status === 429 || error.status >= 500
+    if (!retryable || attempt >= DOWNLOAD_ATTEMPTS) throw error
+    await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** (attempt - 1)))
+    await downloadFile(url, file, onProgress, attempt + 1)
+  }
+}
+
 async function download(url, file, onProgress) {
   const res = await fetch(url)
-  if (!res.ok) throw new Error(`Falha ao baixar ${url}: HTTP ${res.status}`)
+  if (!res.ok) throw Object.assign(new Error(`Falha ao baixar ${url}: HTTP ${res.status}`), { status: res.status })
   const total = Number(res.headers.get('content-length'))
   let received = 0
   let lastPct = -1

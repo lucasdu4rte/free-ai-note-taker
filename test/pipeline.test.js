@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 import sherpa from 'sherpa-onnx-node'
-import { LOCAL_ASR_MODELS, ensureModels } from '../src/models.js'
+import { LOCAL_ASR_MODELS, downloadFile, ensureModels } from '../src/models.js'
 import { FILES, formatTime, processMeeting } from '../src/pipeline.js'
 import { groupSegments, speechSegments, transcribeLocal } from '../src/transcribe.js'
 import { postJson, splitIntoBlocks, summarize } from '../src/llm.js'
@@ -55,6 +55,30 @@ test('rate-limited requests are retried', async () => {
   })
   assert.deepEqual(await postJson(`${server.url}/x`, 'key', '{}'), { ok: true })
   assert.equal(calls, 2)
+  server.close()
+})
+
+test('model downloads are retried when the server has a hiccup', async () => {
+  let calls = 0
+  const server = await fakeApi((_req, res) => {
+    if (++calls === 1) return res.writeHead(504).end()
+    res.end('model')
+  })
+  const file = path.join(tmp(), 'model.onnx')
+  await downloadFile(`${server.url}/model.onnx`, file, () => {})
+  assert.equal(fs.readFileSync(file, 'utf8'), 'model')
+  assert.equal(calls, 2)
+  server.close()
+})
+
+test('a missing model file is not retried', async () => {
+  let calls = 0
+  const server = await fakeApi((_req, res) => {
+    calls++
+    res.writeHead(404).end()
+  })
+  await assert.rejects(downloadFile(`${server.url}/x.onnx`, path.join(tmp(), 'x.onnx'), () => {}), /HTTP 404/)
+  assert.equal(calls, 1)
   server.close()
 })
 
