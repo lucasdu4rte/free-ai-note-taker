@@ -82,6 +82,24 @@ test('a missing model file is not retried', async () => {
   server.close()
 })
 
+test('the connection test reports a rate limit at once instead of retrying', async () => {
+  let calls = 0
+  const server = await fakeApi((_req, res) => {
+    calls++
+    res.writeHead(429).end(JSON.stringify({ error: { message: 'quota exceeded' } }))
+  })
+  await assert.rejects(testLlm({ provider: 'custom', baseURL: server.url, model: 'm' }), /HTTP 429: quota exceeded/)
+  assert.equal(calls, 1)
+  server.close()
+})
+
+test('a request that never answers gives up after its timeout', async () => {
+  const server = await fakeApi(() => {})
+  await assert.rejects(postJson(`${server.url}/x`, '', '{}', { timeoutMs: 100 }), /não respondeu em 0.1 s/)
+  server.closeAllConnections()
+  server.close()
+})
+
 test('a meeting goes from audio to transcript and summary with cloud providers', async () => {
   const requests = []
   const server = await fakeApi(async (req, res) => {

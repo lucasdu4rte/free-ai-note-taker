@@ -102,7 +102,7 @@ async function transcribeWithApi(wav, config) {
   const form = new FormData()
   form.append('file', new Blob([wav], { type: 'audio/wav' }), 'audio.wav')
   form.append('model', config.model)
-  const data = await postJson(`${config.baseURL}/audio/transcriptions`, config.apiKey, form)
+  const data = await postJson(`${config.baseURL}/audio/transcriptions`, config.apiKey, form, config)
   return data.text
 }
 

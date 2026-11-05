@@ -4,7 +4,7 @@ import path from 'node:path'
 import sherpa from 'sherpa-onnx-node'
 import { LOCAL_ASR_MODELS, VAD_MODEL, ensureModels } from './models.js'
 import { speechSegments, transcribeCloud, transcribeLocal } from './transcribe.js'
-import { cleanTranscript, summarize } from './llm.js'
+import { cleanTranscript, summarize, withTestLimits } from './llm.js'
 import { repairWavHeader } from './wav.js'
 
 export const FILES = {
@@ -42,7 +42,7 @@ export async function testTranscription(config, modelsDir, onStatus = () => {}) 
   const audioPath = path.join(dir, FILES.audio)
   fs.writeFileSync(audioPath, fs.readFileSync(SAMPLE_AUDIO))
   try {
-    const transcript = await transcribe(audioPath, config, modelsDir, onStatus)
+    const transcript = await transcribe(audioPath, withTestLimits(config), modelsDir, onStatus)
     if (!transcript) throw new Error('Nenhuma fala foi reconhecida no áudio de teste.')
     return transcript.replace(/^\[[\d:]+\] /gm, '')
   } finally {

@@ -24,7 +24,9 @@ const SUMMARY_PROMPT = `Você escreve atas de reunião. A partir da transcriçã
 Use só o que está na transcrição. Omita seções sem conteúdo.`
 
 const CLEANUP_BLOCK_CHARS = 6000
-const MAX_ATTEMPTS = 4
+const MAX_RETRIES = 3
+// The settings test should answer fast with the real error instead of sitting through rate-limit retries.
+const TEST_LIMITS = { retries: 0, timeoutMs: 30_000 }
 
 export async function cleanTranscript(transcript, config, onStatus) {
   const blocks = splitIntoBlocks(transcript, CLEANUP_BLOCK_CHARS)
@@ -40,8 +42,10 @@ export function summarize(transcript, config) {
   return complete(config, SUMMARY_PROMPT, transcript)
 }
 
+export const withTestLimits = (config) => ({ ...config, ...TEST_LIMITS })
+
 export function testLlm(config) {
-  return complete(config, 'Responda apenas com a palavra OK.', 'Teste de conexão.')
+  return complete(withTestLimits(config), 'Responda apenas com a palavra OK.', 'Teste de conexão.')
 }
 
 function complete(config, system, text) {
@@ -64,24 +68,29 @@ export function splitIntoBlocks(text, maxChars) {
 }
 
 export async function chat(config, messages) {
-  const data = await postJson(`${config.baseURL}/chat/completions`, config.apiKey, JSON.stringify({ model: config.model, messages }))
+  const data = await postJson(`${config.baseURL}/chat/completions`, config.apiKey, JSON.stringify({ model: config.model, messages }), config)
   // Reasoning models served by Ollama/Groq may inline their thinking.
   return data.choices[0].message.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 }
 
 // Free tiers (Gemini, Groq) answer 429 often, so rate limits and server errors are retried with backoff.
-export async function postJson(url, apiKey, body, attempt = 1) {
+export async function postJson(url, apiKey, body, { retries = MAX_RETRIES, timeoutMs } = {}) {
   const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
   if (typeof body === 'string') headers['Content-Type'] = 'application/json'
-  const res = await fetch(url, { method: 'POST', headers, body })
+  const signal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined
+  const res = await fetch(url, { method: 'POST', headers, body, signal }).catch((error) => {
+    if (!signal?.aborted) throw error
+    throw new Error(`${new URL(url).host} não respondeu em ${timeoutMs / 1000} s.`)
+  })
   const data = await res.json().catch(() => null)
   if (res.ok) return data
 
   const retryable = res.status === 429 || res.status >= 500
-  if (retryable && attempt < MAX_ATTEMPTS) {
+  if (retryable && retries > 0) {
+    const attempt = MAX_RETRIES - retries + 1
     const retryAfterSeconds = Number(res.headers.get('retry-after')) || 10 * attempt
     await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000))
-    return postJson(url, apiKey, body, attempt + 1)
+    return postJson(url, apiKey, body, { retries: retries - 1, timeoutMs })
   }
   const detail = data?.error?.message ?? data?.[0]?.error?.message ?? JSON.stringify(data)
   throw new Error(`${new URL(url).host} respondeu HTTP ${res.status}: ${detail}`)
