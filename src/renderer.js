@@ -95,11 +95,13 @@ async function processMeeting(id) {
     await api.processMeeting(id)
     setStatus(id, '')
   } catch (error) {
-    setStatus(id, `Erro: ${error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`)
+    setStatus(id, `Erro: ${errorText(error)}`)
   }
   await refreshList()
   if (id === selectedId) await showMeeting(id)
 }
+
+const errorText = (error) => error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 
 const isProcessing = (id) => Boolean(statuses.get(id)) && !statuses.get(id).startsWith('Erro')
 
@@ -322,9 +324,35 @@ function showSaveState(text, failed = false) {
   if (!failed) saveStateTimer = setTimeout(() => (badge.hidden = true), SAVED_BADGE_MS)
 }
 
+const testButtons = [...document.querySelectorAll('[data-test]')]
+const testHints = Object.fromEntries(testButtons.map(({ dataset }) => [dataset.test, $(`#test-${dataset.test}`).textContent]))
+
+function showTestResult(section, text = testHints[section], state = '') {
+  const result = $(`#test-${section}`)
+  result.textContent = text
+  result.className = state
+}
+
+async function testSection(button) {
+  const section = button.dataset.test
+  button.disabled = true
+  showTestResult(section, 'Testando…')
+  try {
+    const reply = await api.testSettings(section, readSection(section))
+    showTestResult(section, `✓ Funcionou: “${reply}”`, 'ok')
+  } catch (error) {
+    showTestResult(section, `✗ ${errorText(error)}`, 'error')
+  }
+  button.disabled = false
+}
+
+testButtons.forEach((button) => (button.onclick = () => testSection(button)))
+api.onTestStatus((section, status) => showTestResult(section, status))
+
 form.addEventListener('input', (event) => {
   const [section, field] = event.target.name.split('.')
   if (field === 'provider') writeSection(section, fromPreset(PRESETS[section], event.target.value))
+  showTestResult(section)
   clearTimeout(saveTimer)
   saveTimer = setTimeout(saveForm, SAVE_DELAY_MS)
 })

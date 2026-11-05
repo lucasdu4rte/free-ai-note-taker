@@ -2,7 +2,8 @@ import { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, nativeThe
 import fs from 'node:fs'
 import path from 'node:path'
 import { DEFAULT_SETTINGS, LLM_PRESETS } from './presets.js'
-import { FILES, processMeeting, readIfExists } from './pipeline.js'
+import { FILES, processMeeting, readIfExists, testTranscription } from './pipeline.js'
+import { testLlm } from './llm.js'
 import { parseSummary, summaryPreview, toggleTask } from './notes.js'
 import { HEADER_BYTES, SAMPLE_RATE, floatToInt16, repairWavHeader, wavHeader } from './wav.js'
 
@@ -183,6 +184,10 @@ ipcMain.handle('meeting:rename', (_event, id, title) => {
 ipcMain.handle('meeting:open', (_event, id) => shell.openPath(meetingDir(id)))
 ipcMain.handle('settings:get', loadSettings)
 ipcMain.handle('settings:save', (_event, settings) => saveSettings(settings))
+ipcMain.handle('settings:test', (event, section, config) => {
+  if (section === 'llm') return testLlm(config)
+  return testTranscription(config, modelsDir(), (status) => event.sender.send('settings:test-status', section, status))
+})
 
 ipcMain.handle('overlay:get-state', () => overlayState)
 ipcMain.on('overlay:stop', () => win.webContents.send('recording:toggle'))

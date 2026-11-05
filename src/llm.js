@@ -40,6 +40,10 @@ export function summarize(transcript, config) {
   return complete(config, SUMMARY_PROMPT, transcript)
 }
 
+export function testLlm(config) {
+  return complete(config, 'Responda apenas com a palavra OK.', 'Teste de conexão.')
+}
+
 function complete(config, system, text) {
   if (config.provider === 'anthropic') return completeWithClaude(config, system, text)
   return chat(config, [{ role: 'system', content: system }, { role: 'user', content: text }])

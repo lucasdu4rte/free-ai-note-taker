@@ -6,12 +6,12 @@ import path from 'node:path'
 import { test } from 'node:test'
 import sherpa from 'sherpa-onnx-node'
 import { LOCAL_ASR_MODELS, downloadFile, ensureModels } from '../src/models.js'
-import { FILES, formatTime, processMeeting } from '../src/pipeline.js'
+import { FILES, formatTime, processMeeting, testTranscription } from '../src/pipeline.js'
 import { groupSegments, speechSegments, transcribeLocal } from '../src/transcribe.js'
-import { postJson, splitIntoBlocks, summarize } from '../src/llm.js'
+import { postJson, splitIntoBlocks, summarize, testLlm } from '../src/llm.js'
 import { encodeWav, repairWavHeader, wavHeader } from '../src/wav.js'
 
-const FIXTURE = path.join(import.meta.dirname, 'fixtures', 'fala.wav')
+const FIXTURE = path.join(import.meta.dirname, '..', 'src', 'sample.wav')
 // Set MODELS_DIR to the app's models folder to also run the local Parakeet test without re-downloading 650 MB.
 const MODELS_DIR = process.env.MODELS_DIR ?? path.join(os.tmpdir(), 'free-ai-note-taker-models')
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'note-taker-'))
@@ -104,6 +104,19 @@ test('a meeting goes from audio to transcript and summary with cloud providers',
   assert.deepEqual(requests.map((r) => r.url), ['/audio/transcriptions', '/chat/completions', '/chat/completions'])
   assert.ok(requests.every((r) => r.auth === 'Bearer secret'))
   assert.match(requests[0].body, /RIFF/)
+  server.close()
+})
+
+test('the connection test transcribes the bundled sample and checks the AI', async () => {
+  const server = await fakeApi(async (req, res) => {
+    await readBody(req)
+    if (req.url === '/audio/transcriptions') return res.end(JSON.stringify({ text: 'bom dia pessoal' }))
+    res.end(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }))
+  })
+  const provider = { provider: 'custom', baseURL: server.url, apiKey: 'secret', model: 'm', mode: 'transcriptions' }
+
+  assert.equal(await testTranscription(provider, MODELS_DIR), 'bom dia pessoal')
+  assert.equal(await testLlm(provider), 'OK')
   server.close()
 })
 

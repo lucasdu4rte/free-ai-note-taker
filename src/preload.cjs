@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('api', {
   openMeeting: (id) => ipcRenderer.invoke('meeting:open', id),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
+  testSettings: (section, config) => ipcRenderer.invoke('settings:test', section, config),
+  onTestStatus: on('settings:test-status'),
   onStatus: on('status'),
   onToggleRecording: on('recording:toggle'),
   onShowMeeting: on('meeting:show'),

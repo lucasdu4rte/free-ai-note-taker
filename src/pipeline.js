@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import sherpa from 'sherpa-onnx-node'
 import { LOCAL_ASR_MODELS, VAD_MODEL, ensureModels } from './models.js'
@@ -13,6 +14,8 @@ export const FILES = {
   summary: 'resumo.md',
   title: 'titulo.txt',
 }
+
+const SAMPLE_AUDIO = path.join(import.meta.dirname, 'sample.wav')
 
 export async function processMeeting(dir, settings, modelsDir, onStatus = () => {}) {
   const file = (name) => path.join(dir, name)
@@ -31,6 +34,20 @@ export async function processMeeting(dir, settings, modelsDir, onStatus = () => 
   onStatus('Gerando o resumo')
   fs.writeFileSync(file(FILES.summary), await summarize(transcript, settings.llm))
   onStatus('Pronto')
+}
+
+export async function testTranscription(config, modelsDir, onStatus = () => {}) {
+  // The packaged sample sits inside app.asar, which sherpa-onnx's native file reader cannot open.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'note-taker-test-'))
+  const audioPath = path.join(dir, FILES.audio)
+  fs.writeFileSync(audioPath, fs.readFileSync(SAMPLE_AUDIO))
+  try {
+    const transcript = await transcribe(audioPath, config, modelsDir, onStatus)
+    if (!transcript) throw new Error('Nenhuma fala foi reconhecida no áudio de teste.')
+    return transcript.replace(/^\[[\d:]+\] /gm, '')
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 }
 
 async function transcribe(audioPath, config, modelsDir, onStatus) {
