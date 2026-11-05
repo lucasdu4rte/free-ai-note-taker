@@ -142,6 +142,11 @@
       .setting small { font-size: 12px; color: var(--muted); }
       .setting select, .setting input { width: 300px; min-height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
       .hint { margin: 0 4px; font-size: 12px; color: var(--muted); }
+      .setting > .secret { position: relative; display: block; flex: 0 0 300px; }
+      .setting .secret input { width: 100%; padding-right: 34px; }
+      .reveal { position: absolute; top: 50%; right: 3px; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; width: 26px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); }
+      .reveal:hover { background: var(--hover); color: var(--text); }
+      .reveal[aria-pressed='true'] .eye, .reveal[aria-pressed='false'] .eye-off { display: none; }
       .test-btn { flex-shrink: 0; min-height: 30px; padding: 0 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); font-weight: 600; }
       .test-btn:hover:not(:disabled) { background: var(--hover); }
       .setting small.ok { color: var(--ok); }
@@ -224,7 +229,7 @@
             <h2>Transcrição</h2>
             <div class="group">
               <label class="setting"><span>Serviço</span><select name="transcription.provider"></select></label>
-              <label class="setting cloud"><span>Chave de API</span><input type="password" name="transcription.apiKey" autocomplete="off" /></label>
+              <label class="setting cloud"><span>Chave de API</span><span class="secret"><input type="password" name="transcription.apiKey" autocomplete="off" spellcheck="false" /><button type="button" class="reveal" aria-label="Mostrar chave" aria-pressed="false" title="Mostrar chave"><svg class="eye" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg><svg class="eye-off" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.2 3.2"></path><path d="M6.6 6.6C3.9 8.3 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path><path d="m2 2 20 20"></path></svg></button></span></label>
               <label class="setting cloud"><span>Modelo</span><input name="transcription.model" /></label>
               <label class="setting cloud"><span>URL base</span><input name="transcription.baseURL" /></label>
               <div class="setting"><span>Testar<small id="test-transcription">Transcreve um áudio curto de exemplo com o serviço escolhido</small></span><button type="button" class="test-btn" data-test="transcription">Testar</button></div>
@@ -235,7 +240,7 @@
             <h2>Revisão e resumo</h2>
             <div class="group">
               <label class="setting"><span>Serviço</span><select name="llm.provider"></select></label>
-              <label class="setting"><span>Chave de API<small>Não precisa para o Ollama</small></span><input type="password" name="llm.apiKey" autocomplete="off" /></label>
+              <label class="setting"><span>Chave de API<small>Não precisa para o Ollama</small></span><span class="secret"><input type="password" name="llm.apiKey" autocomplete="off" spellcheck="false" /><button type="button" class="reveal" aria-label="Mostrar chave" aria-pressed="false" title="Mostrar chave"><svg class="eye" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg><svg class="eye-off" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.2 3.2"></path><path d="M6.6 6.6C3.9 8.3 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path><path d="m2 2 20 20"></path></svg></button></span></label>
               <label class="setting"><span>Modelo</span><input name="llm.model" /></label>
               <label class="setting"><span>URL base</span><input name="llm.baseURL" /></label>
               <div class="setting"><span>Testar<small id="test-llm">Manda uma mensagem curta para a IA e espera a resposta</small></span><button type="button" class="test-btn" data-test="llm">Testar</button></div>

@@ -361,6 +361,17 @@ form.addEventListener('input', (event) => {
 })
 
 $('#record').onclick = toggleRecording
+document.querySelectorAll('.reveal').forEach((button) => {
+  button.onclick = () => {
+    const input = button.previousElementSibling
+    const reveal = input.type === 'password'
+    input.type = reveal ? 'text' : 'password'
+    button.setAttribute('aria-pressed', reveal)
+    const label = reveal ? 'Esconder chave' : 'Mostrar chave'
+    button.ariaLabel = label
+    button.title = label
+  }
+})
 $('#update-install').onclick = () => api.installUpdate()
 api.onUpdateReady((version) => {
   $('#update-version').textContent = version
