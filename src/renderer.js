@@ -46,17 +46,9 @@ async function startRecording() {
   for (const stream of streams) context.createMediaStreamSource(stream).connect(recorder)
   recorder.connect(context.destination)
   const id = await api.startRecording()
-  recorder.port.onmessage = (event) => {
-    api.sendAudio(event.data)
-    api.sendLevel(level(event.data))
-  }
+  // The worklet sends audio chunks every 250 ms and, in between, a level number every 50 ms for the overlay.
+  recorder.port.onmessage = ({ data }) => (typeof data === 'number' ? api.sendLevel(data) : api.sendAudio(data))
   return { id, context, streams }
-}
-
-function level(samples) {
-  let sum = 0
-  for (const sample of samples) sum += sample * sample
-  return Math.min(1, Math.sqrt(sum / samples.length) * 4)
 }
 
 function releaseAudio(context, streams) {
