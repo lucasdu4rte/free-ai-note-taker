@@ -2,6 +2,7 @@ import { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, nativeThe
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import electronUpdater from 'electron-updater'
 import { DEFAULT_SETTINGS, LLM_PRESETS } from './presets.js'
 import { FILES, processMeeting, readIfExists, testTranscription } from './pipeline.js'
 import { testLlm } from './llm.js'
@@ -200,6 +201,20 @@ ipcMain.on('overlay:stop', () => win.webContents.send('recording:toggle'))
 ipcMain.on('overlay:open-meeting', (_event, id) => focusMainWindow('meeting:show', id))
 ipcMain.on('overlay:open-settings', () => focusMainWindow('settings:show'))
 
+// Updates come from this repo's GitHub Releases (latest.yml). A downloaded update installs when the app quits,
+// so it never cuts a recording short; the sidebar also offers to restart right away.
+function checkForUpdates() {
+  const { autoUpdater } = electronUpdater
+  autoUpdater.on('update-downloaded', ({ version }) => win.webContents.send('update:ready', version))
+  autoUpdater.on('error', (error) => console.error('Update failed:', error.message))
+  autoUpdater.checkForUpdates().catch(() => {})
+}
+
+ipcMain.on('update:install', () => {
+  if (recording) return
+  electronUpdater.autoUpdater.quitAndInstall(true, true)
+})
+
 app.whenReady().then(() => {
   // Teams/Meet/Zoom audio comes out of the speakers: Windows lets us record it as a WASAPI loopback, no driver needed.
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
@@ -222,6 +237,8 @@ app.whenReady().then(() => {
   win.on('closed', () => app.quit())
 
   overlay = createOverlay()
+
+  if (app.isPackaged) checkForUpdates()
 
   const shortcutRegistered = globalShortcut.register(SHORTCUT, () => win.webContents.send('recording:toggle'))
   ipcMain.handle('app:shortcut', () => (shortcutRegistered ? SHORTCUT_LABEL : null))

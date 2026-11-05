@@ -28,17 +28,26 @@
     },
     "nsis": {
       "oneClick": true,
-      "perMachine": false
+      "perMachine": false,
+      "artifactName": "Free-AI-Note-Taker-Setup-${version}.${ext}"
     },
     "mac": {
       "target": "dmg",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Gravar o áudio da reunião."
       }
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "lucasdu4rte",
+        "repo": "free-ai-note-taker"
+      }
+    ]
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.0.0",
+    "electron-updater": "^6.8.11",
     "sherpa-onnx-node": "^1.13.8"
   },
   "devDependencies": {

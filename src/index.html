@@ -68,6 +68,8 @@
       .nav.on { background: var(--sel); color: var(--accent); }
       .nav .count { margin-left: auto; font-size: 11px; color: var(--muted); }
       .status { padding: 10px; border-radius: 8px; background: var(--group); display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+      .update { margin-bottom: 8px; padding: 10px; border-radius: 8px; background: var(--sel); display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+      .update button { min-height: 28px; border: 0; border-radius: 6px; background: var(--accent); color: var(--on-accent); font-weight: 600; }
       .status .state { display: flex; align-items: center; gap: 6px; color: var(--text); }
 
       .dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
@@ -166,6 +168,10 @@
           Configurações
         </button>
         <span class="grow"></span>
+        <div id="update" class="update" role="status" hidden>
+          <span>A versão <b id="update-version"></b> foi baixada e entra quando você fechar o app.</span>
+          <button id="update-install" type="button">Reiniciar e atualizar</button>
+        </div>
         <div class="status">
           <span class="state"><span id="state-dot" class="dot ok" aria-hidden="true"></span><span id="state">Pronto</span></span>
           <span id="asr-label"></span>

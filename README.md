@@ -47,7 +47,9 @@ Para incluir o teste do Parakeet local, aponte `MODELS_DIR` para a pasta de mode
 
 ## Gerar o instalador do Windows
 
-O instalador (`Free AI Note Taker Setup x.y.z.exe`) é por usuário: instala em `%LOCALAPPDATA%\Programs` e não pede admin. Também sai uma versão portátil (`.exe` único).
+O instalador (`Free-AI-Note-Taker-Setup-x.y.z.exe`) é por usuário: instala em `%LOCALAPPDATA%\Programs` e não pede admin. Também sai uma versão portátil (`.exe` único).
+
+**Atualização automática:** o app instalado procura versões novas nas Releases do GitHub ao abrir, baixa em segundo plano e instala quando você fecha o app (ou na hora, pelo aviso na barra lateral). A versão portátil não se atualiza sozinha. Para publicar uma versão, suba o `version` do `package.json` e crie uma tag `v*`: o workflow anexa à release os `.exe`, o `.blockmap` e o `latest.yml` que o app consulta.
 
 - **Num PC Windows:** `npm ci` e depois `npm run dist:win`. Os arquivos ficam em `dist\`.
 - **Pelo GitHub Actions:** o workflow `Build Windows` roda no Windows e publica os `.exe` como artefato (dispare manualmente ou com uma tag `v*`).

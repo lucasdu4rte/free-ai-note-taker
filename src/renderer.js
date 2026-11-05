@@ -116,6 +116,8 @@ function renderRecordState() {
   $('#record-label').textContent = recording ? 'Parar' : 'Gravar'
   $('#state').textContent = state.label
   $('#state-dot').className = `dot ${state.dot}`
+  $('#update-install').disabled = state.dot !== 'ok'
+  $('#update-install').title = state.dot === 'ok' ? '' : 'Espere a gravação e o processamento terminarem'
 }
 
 function formatWhen(id) {
@@ -359,6 +361,11 @@ form.addEventListener('input', (event) => {
 })
 
 $('#record').onclick = toggleRecording
+$('#update-install').onclick = () => api.installUpdate()
+api.onUpdateReady((version) => {
+  $('#update-version').textContent = version
+  $('#update').hidden = false
+})
 document.querySelectorAll('.nav').forEach((button) => (button.onclick = () => showView(button.dataset.view)))
 $('#search').oninput = renderList
 const selectTab = (name) => () => {
