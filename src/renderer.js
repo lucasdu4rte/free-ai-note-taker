@@ -1,10 +1,10 @@
-import { LLM_PRESETS, TRANSCRIPTION_PRESETS, fromPreset } from './presets.js'
+import { LLM_PRESETS, TRANSCRIPTION_PRESETS, fromPreset, llmFromPreset } from './presets.js'
 import { STEPS, parseSummary, parseTranscript, stepStates } from './notes.js'
 
 const { api } = window
 const $ = (selector) => document.querySelector(selector)
 const PRESETS = { transcription: TRANSCRIPTION_PRESETS, llm: LLM_PRESETS }
-const FIELDS = ['provider', 'apiKey', 'model', 'baseURL', 'mode']
+const CONFIG_FROM_PRESET = { transcription: (provider) => fromPreset(TRANSCRIPTION_PRESETS, provider), llm: llmFromPreset }
 const SAVE_DELAY_MS = 400
 const SAVED_BADGE_MS = 2500
 const STEP_LABELS = { transcribe: 'Transcrição', clean: 'Revisão do texto', summarize: 'Resumo' }
@@ -15,6 +15,8 @@ const STEP_VIEWS = {
   error: { tone: 'error', text: (run) => run.error, action: 'Tentar de novo' },
 }
 const form = $('#settings-form')
+const transcriptionGroup = $('[data-section=transcription]')
+const llmGroups = () => [...$('#llm-groups').children]
 // Per meeting: { step, detail } while it runs, { step, error } after it fails.
 const runs = new Map()
 let meetings = []
@@ -307,13 +309,35 @@ function showView(view) {
   document.querySelectorAll('.nav').forEach((button) => button.classList.toggle('on', button.dataset.view === view))
 }
 
-function writeSection(section, config) {
-  for (const field of FIELDS) form.elements[`${section}.${field}`].value = config[field] ?? ''
-  form.querySelectorAll(`[data-section=${section}] .cloud`).forEach((row) => (row.hidden = config.provider === 'local'))
+function writeConfig(group, config) {
+  for (const input of group.querySelectorAll('[name]')) input.value = config[input.name] ?? ''
+  group.querySelectorAll('.cloud').forEach((row) => (row.hidden = config.provider === 'local'))
 }
 
-function readSection(section) {
-  return Object.fromEntries(FIELDS.map((field) => [field, form.elements[`${section}.${field}`].value.trim()]))
+function readConfig(group) {
+  return Object.fromEntries([...group.querySelectorAll('[name]')].map((input) => [input.name, input.value.trim()]))
+}
+
+const providerOptions = (presets) => Object.entries(presets).map(([value, { label }]) => new Option(label, value))
+
+function renderLlmGroups(configs) {
+  $('#llm-groups').replaceChildren(...configs.map(llmGroup))
+}
+
+function llmGroup(config, index) {
+  const group = $('#llm-template').content.firstElementChild.cloneNode(true)
+  group.querySelector('.llm-title').textContent = index ? `Reserva ${index}` : 'Principal'
+  group.querySelector('[data-action=remove]').hidden = !index
+  group.querySelector('[name=provider]').append(...providerOptions(LLM_PRESETS))
+  writeConfig(group, config)
+  return group
+}
+
+function changeLlmGroups(change) {
+  const configs = llmGroups().map(readConfig)
+  change(configs)
+  renderLlmGroups(configs)
+  saveSoon()
 }
 
 const shortLabel = (section, provider) => PRESETS[section][provider]?.label.split(' (')[0] ?? provider
@@ -323,13 +347,12 @@ function renderProviderLabels(settings) {
   $('#llm-label').textContent = shortLabel('llm', settings.llm.provider)
 }
 
-for (const [section, presets] of Object.entries(PRESETS)) {
-  form.elements[`${section}.provider`].append(...Object.entries(presets).map(([value, { label }]) => new Option(label, value)))
-}
+transcriptionGroup.querySelector('[name=provider]').append(...providerOptions(TRANSCRIPTION_PRESETS))
 
 form.addEventListener('submit', (event) => event.preventDefault())
 async function saveForm() {
-  const settings = { transcription: readSection('transcription'), llm: readSection('llm') }
+  const [llm, ...llmFallbacks] = llmGroups().map(readConfig)
+  const settings = { transcription: readConfig(transcriptionGroup), llm, llmFallbacks }
   try {
     await api.saveSettings(settings)
   } catch (error) {
@@ -349,51 +372,63 @@ function showSaveState(text, failed = false) {
   if (!failed) saveStateTimer = setTimeout(() => (badge.hidden = true), SAVED_BADGE_MS)
 }
 
-const testButtons = [...document.querySelectorAll('[data-test]')]
-const testHints = Object.fromEntries(testButtons.map(({ dataset }) => [dataset.test, $(`#test-${dataset.test}`).textContent]))
-
-function showTestResult(section, text = testHints[section], state = '') {
-  const result = $(`#test-${section}`)
-  result.textContent = text
-  result.className = state
+function saveSoon() {
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(saveForm, SAVE_DELAY_MS)
 }
 
-async function testSection(button) {
-  const section = button.dataset.test
+function showTestResult(group, text, state = '') {
+  const result = group.querySelector('.test-result')
+  result.dataset.hint ??= result.textContent
+  result.textContent = text ?? result.dataset.hint
+  result.className = `test-result ${state}`
+}
+
+async function testGroup(group, button) {
   button.disabled = true
-  showTestResult(section, 'Testando…')
+  showTestResult(group, 'Testando…')
   try {
-    const reply = await api.testSettings(section, readSection(section))
-    showTestResult(section, `✓ Funcionou: “${reply}”`, 'ok')
+    const reply = await api.testSettings(group.dataset.section, readConfig(group))
+    showTestResult(group, `✓ Funcionou: “${reply}”`, 'ok')
   } catch (error) {
-    showTestResult(section, `✗ ${errorText(error)}`, 'error')
+    showTestResult(group, `✗ ${errorText(error)}`, 'error')
   }
   button.disabled = false
 }
 
-testButtons.forEach((button) => (button.onclick = () => testSection(button)))
-api.onTestStatus((section, status) => showTestResult(section, status))
+function toggleSecret(_group, button) {
+  const input = button.previousElementSibling
+  const reveal = input.type === 'password'
+  input.type = reveal ? 'text' : 'password'
+  button.setAttribute('aria-pressed', reveal)
+  const label = reveal ? 'Esconder chave' : 'Mostrar chave'
+  button.ariaLabel = label
+  button.title = label
+}
+
+// The LLM cards are cloned from a template, so their buttons are handled by one listener on the form.
+const GROUP_ACTIONS = {
+  test: testGroup,
+  reveal: toggleSecret,
+  remove: (group) => changeLlmGroups((configs) => configs.splice(llmGroups().indexOf(group), 1)),
+}
+
+form.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-action]')
+  if (!button) return
+  GROUP_ACTIONS[button.dataset.action](button.closest('[data-section]'), button)
+})
+api.onTestStatus((section, status) => showTestResult($(`[data-section=${section}]`), status))
 
 form.addEventListener('input', (event) => {
-  const [section, field] = event.target.name.split('.')
-  if (field === 'provider') writeSection(section, fromPreset(PRESETS[section], event.target.value))
-  showTestResult(section)
-  clearTimeout(saveTimer)
-  saveTimer = setTimeout(saveForm, SAVE_DELAY_MS)
+  const group = event.target.closest('[data-section]')
+  if (event.target.name === 'provider') writeConfig(group, CONFIG_FROM_PRESET[group.dataset.section](event.target.value))
+  showTestResult(group)
+  saveSoon()
 })
 
+$('#add-llm').onclick = () => changeLlmGroups((configs) => configs.push(llmFromPreset('groq')))
 $('#record').onclick = toggleRecording
-document.querySelectorAll('.reveal').forEach((button) => {
-  button.onclick = () => {
-    const input = button.previousElementSibling
-    const reveal = input.type === 'password'
-    input.type = reveal ? 'text' : 'password'
-    button.setAttribute('aria-pressed', reveal)
-    const label = reveal ? 'Esconder chave' : 'Mostrar chave'
-    button.ariaLabel = label
-    button.title = label
-  }
-})
 $('#update-install').onclick = () => api.installUpdate()
 api.onUpdateReady((version) => {
   $('#update-version').textContent = version
@@ -432,8 +467,8 @@ api.onToggleRecording(toggleRecording)
 api.onShowSettings(() => showView('settings'))
 
 const settings = await api.getSettings()
-writeSection('transcription', settings.transcription)
-writeSection('llm', settings.llm)
+writeConfig(transcriptionGroup, settings.transcription)
+renderLlmGroups([settings.llm, ...settings.llmFallbacks])
 renderProviderLabels(settings)
 
 const shortcut = await api.shortcut()
