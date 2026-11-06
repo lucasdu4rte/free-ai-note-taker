@@ -226,6 +226,15 @@ ipcMain.on('update:install', () => {
   electronUpdater.autoUpdater.quitAndInstall(true, true)
 })
 
+// A second copy would fight the first over the global shortcut and the meeting being recorded.
+if (!app.requestSingleInstanceLock()) app.quit()
+app.on('second-instance', () => {
+  if (!win) return
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+})
+
 app.whenReady().then(() => {
   nativeTheme.themeSource = readIfExists(themeFile())?.trim() || 'system'
   // Teams/Meet/Zoom audio comes out of the speakers: Windows lets us record it as a WASAPI loopback, no driver needed.
