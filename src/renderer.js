@@ -490,8 +490,10 @@ $('#add-llm').onclick = () => {
 $('#record').onclick = toggleRecording
 $('#update-install').onclick = () => api.installUpdate()
 api.onUpdateReady((version) => {
-  $('#update-version').textContent = version
-  $('#update').hidden = false
+  $('#update-result').textContent = `↓ A versão ${version} foi baixada e entra quando você fechar o app.`
+  $('#update-result').className = 'ok'
+  $('#check-update').hidden = true
+  $('#update-install').hidden = false
 })
 document.querySelectorAll('.nav').forEach((button) => (button.onclick = () => showView(button.dataset.view)))
 $('#search').oninput = renderList
