@@ -532,12 +532,16 @@ $('#delete').onclick = () =>
   })
 $('#check-update').onclick = () =>
   withLoading($('#check-update'), async () => {
-    $('#update-result').textContent = 'Procurando…'
+    const result = $('#update-result')
+    result.className = 'busy'
+    result.textContent = 'Procurando…'
     try {
       const { latest, available } = await api.checkForUpdate()
-      $('#update-result').textContent = available ? `Baixando a versão ${latest}. Ela entra quando você fechar o app.` : 'Você já está na versão mais nova.'
+      result.textContent = available ? `↓ Baixando a versão ${latest}. Ela entra quando você fechar o app.` : `✓ Você já está na versão mais nova (${latest}).`
+      result.className = 'ok'
     } catch (error) {
-      $('#update-result').textContent = errorText(error)
+      result.textContent = `✗ ${errorText(error)}`
+      result.className = 'error'
     }
   })
 $('#theme').onchange = () => api.setTheme($('#theme').value)
