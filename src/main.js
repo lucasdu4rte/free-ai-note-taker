@@ -25,6 +25,7 @@ const modelsDir = () => path.join(app.getPath('userData'), 'models')
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
 const shortcutFile = () => path.join(app.getPath('userData'), 'shortcut.txt')
 const themeFile = () => path.join(app.getPath('userData'), 'theme.txt')
+const updateLogFile = () => path.join(app.getPath('userData'), 'update.log')
 const preload = path.join(import.meta.dirname, 'preload.cjs')
 
 function meetingDir(id) {
@@ -225,6 +226,8 @@ ipcMain.on('overlay:open-settings', () => focusMainWindow('settings:show'))
 // so it never cuts a recording short; the sidebar also offers to restart right away.
 function watchUpdates() {
   const { autoUpdater } = electronUpdater
+  const logTo = (level) => (message) => fs.appendFileSync(updateLogFile(), `${new Date().toISOString()} ${level} ${message}\n`)
+  autoUpdater.logger = { info: logTo('info'), warn: logTo('warn'), error: logTo('error'), debug: () => {} }
   autoUpdater.on('update-downloaded', ({ version }) => win.webContents.send('update:ready', version))
   autoUpdater.on('error', (error) => console.error('Update failed:', error.message))
   autoUpdater.checkForUpdates().catch(() => {})
@@ -239,7 +242,11 @@ ipcMain.handle('update:check', async () => {
 
 ipcMain.on('update:install', () => {
   if (recording) return
-  electronUpdater.autoUpdater.quitAndInstall(true, true)
+  // A silent install left the window on screen, looking frozen, until the installer killed it.
+  // Hiding it right away and showing the installer's progress bar makes the restart visible.
+  win.hide()
+  overlay.hide()
+  electronUpdater.autoUpdater.quitAndInstall(false, true)
 })
 
 // A second copy would fight the first over the global shortcut and the meeting being recorded.
