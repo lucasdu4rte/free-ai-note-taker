@@ -23,13 +23,27 @@ let meetings = []
 let doneSteps = []
 let selectedId
 let summaryText
+let transcriptText
 let tab = 'summary'
 let recording
 let toggling = false
 let saveTimer
 let saveStateTimer
+let notice
 
 const captureSystemAudio = api.platform === 'win32'
+const SHORT_RECORDING_NOTICE_MS = 4000
+
+async function withLoading(button, task) {
+  button.disabled = true
+  button.classList.add('loading')
+  try {
+    return await task()
+  } finally {
+    button.classList.remove('loading')
+    button.disabled = false
+  }
+}
 
 function el(tag, props = {}, ...children) {
   const node = Object.assign(document.createElement(tag), props)
@@ -70,26 +84,40 @@ function releaseAudio(context, streams) {
 async function toggleRecording() {
   if (toggling) return
   toggling = true
+  $('#record').classList.add('loading')
+  $('#record').disabled = true
+  $('#record-label').textContent = recording ? 'Salvando…' : 'Iniciando…'
   try {
-    if (!recording) {
-      recording = await startRecording()
-      renderRecordState()
-      return
-    }
-    const { context, streams } = recording
-    recording = undefined
-    renderRecordState()
-    await releaseAudio(context, streams)
-    const id = await api.stopRecording()
-    showView('meetings')
-    await refreshList()
-    await showMeeting(id)
-    processMeeting(id, 'transcribe')
+    if (recording) await stopRecording()
+    else recording = await startRecording()
   } catch (error) {
     alert(`Não foi possível gravar: ${error.message}`)
   } finally {
     toggling = false
+    $('#record').classList.remove('loading')
+    $('#record').disabled = false
+    renderRecordState()
   }
+}
+
+async function stopRecording() {
+  const { context, streams } = recording
+  recording = undefined
+  await releaseAudio(context, streams)
+  const id = await api.stopRecording()
+  if (!id) return showNotice('Gravação com menos de 3 s descartada')
+  showView('meetings')
+  await refreshList()
+  await showMeeting(id)
+  processMeeting(id, 'transcribe')
+}
+
+function showNotice(text) {
+  notice = text
+  setTimeout(() => {
+    notice = undefined
+    renderRecordState()
+  }, SHORT_RECORDING_NOTICE_MS)
 }
 
 async function processMeeting(id, from) {
@@ -119,6 +147,7 @@ function setRun(id, run) {
 function appState() {
   if (recording) return { label: 'Gravando', dot: 'rec' }
   if ([...runs.keys()].some(isProcessing)) return { label: 'Processando', dot: 'busy' }
+  if (notice) return { label: notice, dot: 'warn' }
   return { label: 'Pronto', dot: 'ok' }
 }
 
@@ -198,11 +227,11 @@ async function showMeeting(id) {
   selectedId = id
   const { summary, transcript, audioUrl, done } = await api.readMeeting(id)
   summaryText = summary
+  transcriptText = transcript
   doneSteps = done
   $('#meeting').hidden = false
   $('#title').textContent = titleOf(meeting)
   $('#meta').textContent = `${formatWhen(id)} · ${meeting.minutes} min`
-  $('#copy').disabled = !summary
   renderSteps()
   renderPlayer(audioUrl)
   renderSummary(id, summary)
@@ -227,6 +256,8 @@ function renderSteps() {
   $('#steps').hidden = firstUndone === -1
   $('#steps').replaceChildren(...STEPS.map((step, i) => stepRow(selectedId, step, states[i], run, idle && i === firstUndone)))
   $('#process').disabled = !idle || !doneSteps.includes('transcribe')
+  $('#process').classList.toggle('loading', !idle)
+  $('#delete').disabled = !idle
 }
 
 function stepRow(id, step, state, run, withAction) {
@@ -292,6 +323,8 @@ function renderTranscript(transcript) {
   )
 }
 
+const copyLabel = () => (tab === 'summary' ? 'Copiar resumo' : 'Copiar transcrição')
+
 function renderTab() {
   for (const [name, button, panel] of [
     ['summary', '#tab-summary', '#panel-summary'],
@@ -301,6 +334,9 @@ function renderTab() {
     $(button).setAttribute('aria-selected', tab === name)
     $(panel).hidden = tab !== name
   }
+  $('#copy').ariaLabel = copyLabel()
+  $('#copy').title = copyLabel()
+  $('#copy').disabled = !(tab === 'summary' ? summaryText : transcriptText)
 }
 
 function showView(view) {
@@ -386,16 +422,26 @@ function showTestResult(group, text, state = '') {
   result.className = `test-result ${state}`
 }
 
+// shortcut: Cancelar only stops waiting; the request finishes in the background (at most 30 s for the AI), which is harmless.
 async function testGroup(group, button) {
-  button.disabled = true
+  const run = (group.testRun = (group.testRun ?? 0) + 1)
+  const finish = (text, state) => {
+    if (group.testRun !== run) return
+    group.testRun++
+    button.classList.remove('loading')
+    button.textContent = 'Testar'
+    showTestResult(group, text, state)
+  }
+  if (button.classList.contains('loading')) return finish('Teste cancelado')
+  button.classList.add('loading')
+  button.textContent = 'Cancelar'
   showTestResult(group, 'Testando…')
   try {
     const reply = await api.testSettings(group.dataset.section, readConfig(group))
-    showTestResult(group, `✓ Funcionou: “${reply}”`, 'ok')
+    finish(`✓ Funcionou: “${reply}”`, 'ok')
   } catch (error) {
-    showTestResult(group, `✗ ${errorText(error)}`, 'error')
+    finish(`✗ ${errorText(error)}`, 'error')
   }
-  button.disabled = false
 }
 
 function toggleSecret(_group, button) {
@@ -424,10 +470,14 @@ form.addEventListener('click', (event) => {
   if (!button) return
   GROUP_ACTIONS[button.dataset.action](button.closest('[data-section]'), button)
 })
-api.onTestStatus((section, status) => showTestResult($(`[data-section=${section}]`), status))
+api.onTestStatus((section, status) => {
+  const group = $(`[data-section=${section}]`)
+  if (group.querySelector('[data-action=test]').classList.contains('loading')) showTestResult(group, status)
+})
 
 form.addEventListener('input', (event) => {
   const group = event.target.closest('[data-section]')
+  if (!group) return
   if (event.target.name === 'provider') writeConfig(group, CONFIG_FROM_PRESET[group.dataset.section](event.target.value))
   showTestResult(group)
   saveSoon()
@@ -466,10 +516,31 @@ $('#title').onblur = async () => {
 }
 $('#open-folder').onclick = () => api.openMeeting(selectedId)
 $('#copy').onclick = async () => {
-  await navigator.clipboard.writeText(summaryText)
-  $('#meeting-status').textContent = 'Resumo copiado'
+  await navigator.clipboard.writeText(tab === 'summary' ? summaryText : transcriptText)
+  $('#meeting-status').textContent = tab === 'summary' ? 'Resumo copiado' : 'Transcrição copiada'
   setTimeout(() => ($('#meeting-status').textContent = ''), 1500)
 }
+$('#delete').onclick = () =>
+  withLoading($('#delete'), async () => {
+    if (!confirm(`Excluir "${titleOf(selectedMeeting())}"? A pasta vai para a lixeira.`)) return
+    await api.deleteMeeting(selectedId)
+    runs.delete(selectedId)
+    selectedId = undefined
+    $('#meeting').hidden = true
+    await refreshList()
+    if (meetings.length) await showMeeting(meetings[0].id)
+  })
+$('#check-update').onclick = () =>
+  withLoading($('#check-update'), async () => {
+    $('#update-result').textContent = 'Procurando…'
+    try {
+      const { latest, available } = await api.checkForUpdate()
+      $('#update-result').textContent = available ? `Baixando a versão ${latest}. Ela entra quando você fechar o app.` : 'Você já está na versão mais nova.'
+    } catch (error) {
+      $('#update-result').textContent = errorText(error)
+    }
+  })
+$('#theme').onchange = () => api.setTheme($('#theme').value)
 
 api.onMeetingProgress((id, step, detail) => setRun(id, { step, detail }))
 api.onToggleRecording(toggleRecording)
@@ -514,6 +585,7 @@ async function changeShortcut() {
 $('#change-shortcut').onclick = changeShortcut
 renderShortcut(await api.shortcut())
 $('#app-version').textContent = await api.version()
+$('#theme').value = await api.theme()
 
 await refreshList()
 if (meetings.length) await showMeeting(meetings[0].id)

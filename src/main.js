@@ -17,11 +17,14 @@ const MEETING_ID = /^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/
 const DEFAULT_SHORTCUT = 'CommandOrControl+Alt+R'
 const OVERLAY_SIZE = { width: 640, height: 112, bottomMargin: 24 }
 const MAX_TITLE_LENGTH = 120
+const MIN_RECORDING_SECONDS = 3
+const THEMES = ['system', 'light', 'dark']
 
 const notesDir = () => path.join(app.getPath('documents'), 'Free AI Note Taker')
 const modelsDir = () => path.join(app.getPath('userData'), 'models')
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
 const shortcutFile = () => path.join(app.getPath('userData'), 'shortcut.txt')
+const themeFile = () => path.join(app.getPath('userData'), 'theme.txt')
 const preload = path.join(import.meta.dirname, 'preload.cjs')
 
 function meetingDir(id) {
@@ -29,11 +32,12 @@ function meetingDir(id) {
   return path.join(notesDir(), id)
 }
 
+const audioSeconds = (file) => (fs.existsSync(file) ? (fs.statSync(file).size - HEADER_BYTES) / (SAMPLE_RATE * 2) : 0)
+
 function meetingInfo(id) {
   const summary = readIfExists(path.join(meetingDir(id), FILES.summary))
   const customTitle = readIfExists(path.join(meetingDir(id), FILES.title))
-  const audio = path.join(meetingDir(id), FILES.audio)
-  const seconds = fs.existsSync(audio) ? (fs.statSync(audio).size - HEADER_BYTES) / (SAMPLE_RATE * 2) : 0
+  const seconds = audioSeconds(path.join(meetingDir(id), FILES.audio))
   return {
     id,
     title: customTitle || parseSummary(summary).title,
@@ -138,9 +142,13 @@ ipcMain.handle('recording:stop', () => {
   const { id, fd } = recording
   recording = null
   fs.closeSync(fd)
-  repairWavHeader(path.join(meetingDir(id), FILES.audio))
+  const audio = path.join(meetingDir(id), FILES.audio)
+  repairWavHeader(audio)
   hideOverlay()
-  return id
+  // A press-and-release of the shortcut leaves an empty meeting nobody wants in the list.
+  if (audioSeconds(audio) >= MIN_RECORDING_SECONDS) return id
+  fs.rmSync(meetingDir(id), { recursive: true, force: true })
+  return null
 })
 
 ipcMain.handle('meeting:process', async (event, id, from) => {
@@ -179,6 +187,11 @@ ipcMain.handle('meeting:rename', (_event, id, title) => {
   fs.writeFileSync(file, name)
 })
 
+ipcMain.handle('meeting:delete', (_event, id) => {
+  if (id === recording?.id) throw new Error('Pare a gravação antes de excluir esta reunião.')
+  return shell.trashItem(meetingDir(id))
+})
+
 ipcMain.handle('meeting:open', (_event, id) => shell.openPath(meetingDir(id)))
 ipcMain.handle('settings:get', loadSettings)
 ipcMain.handle('app:version', () => app.getVersion())
@@ -194,12 +207,19 @@ ipcMain.on('overlay:open-settings', () => focusMainWindow('settings:show'))
 
 // Updates come from this repo's GitHub Releases (latest.yml). A downloaded update installs when the app quits,
 // so it never cuts a recording short; the sidebar also offers to restart right away.
-function checkForUpdates() {
+function watchUpdates() {
   const { autoUpdater } = electronUpdater
   autoUpdater.on('update-downloaded', ({ version }) => win.webContents.send('update:ready', version))
   autoUpdater.on('error', (error) => console.error('Update failed:', error.message))
   autoUpdater.checkForUpdates().catch(() => {})
 }
+
+ipcMain.handle('update:check', async () => {
+  if (!app.isPackaged) throw new Error('A busca de atualização só funciona no app instalado.')
+  const result = await electronUpdater.autoUpdater.checkForUpdates()
+  const latest = result?.updateInfo.version ?? app.getVersion()
+  return { latest, available: latest !== app.getVersion() }
+})
 
 ipcMain.on('update:install', () => {
   if (recording) return
@@ -207,6 +227,7 @@ ipcMain.on('update:install', () => {
 })
 
 app.whenReady().then(() => {
+  nativeTheme.themeSource = readIfExists(themeFile())?.trim() || 'system'
   // Teams/Meet/Zoom audio comes out of the speakers: Windows lets us record it as a WASAPI loopback, no driver needed.
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
     const [source] = await desktopCapturer.getSources({ types: ['screen'] })
@@ -229,7 +250,7 @@ app.whenReady().then(() => {
 
   overlay = createOverlay()
 
-  if (app.isPackaged) checkForUpdates()
+  if (app.isPackaged) watchUpdates()
 
   registerShortcut(readIfExists(shortcutFile())?.trim() || DEFAULT_SHORTCUT)
 })
@@ -255,6 +276,13 @@ ipcMain.handle('app:shortcut-set', (_event, accelerator) => {
   }
   if (previous) registerShortcut(previous)
   return { label: currentShortcut(), taken: Boolean(accelerator) }
+})
+
+ipcMain.handle('app:theme', () => nativeTheme.themeSource)
+ipcMain.handle('app:theme-set', (_event, theme) => {
+  if (!THEMES.includes(theme)) throw new Error(`Tema inválido: ${theme}`)
+  nativeTheme.themeSource = theme
+  fs.writeFileSync(themeFile(), theme)
 })
 
 app.on('will-quit', () => globalShortcut.unregisterAll())
