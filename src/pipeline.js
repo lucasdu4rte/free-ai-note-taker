@@ -23,14 +23,15 @@ const STEP_OUTPUTS = { transcribe: FILES.rawTranscript, clean: FILES.transcript,
 export const completedSteps = (dir) => STEPS.filter((step) => fs.existsSync(path.join(dir, STEP_OUTPUTS[step])))
 
 // Starting at `from` reuses the earlier outputs, so retrying a failed LLM step (e.g. a free-tier quota) never redoes the transcription.
-export async function processMeeting(dir, settings, modelsDir, onProgress = () => {}, from = STEPS[0]) {
+// transcribeAudio is swappable so the app can run it in a separate process (see main.js transcribeInWorker).
+export async function processMeeting(dir, settings, modelsDir, onProgress = () => {}, from = STEPS[0], transcribeAudio = transcribe) {
   if (!STEPS.includes(from)) throw new Error(`Etapa inválida: ${from}`)
   const file = (name) => path.join(dir, name)
   const read = (step) => fs.readFileSync(file(STEP_OUTPUTS[step]), 'utf8')
   const complete = completeWithFallback([settings.llm, ...settings.llmFallbacks])
   const run = {
     transcribe: async (report) => {
-      const raw = await transcribe(file(FILES.audio), settings.transcription, modelsDir, report)
+      const raw = await transcribeAudio(file(FILES.audio), settings.transcription, modelsDir, report)
       if (!raw) throw new Error('Nenhuma fala foi detectada no áudio.')
       return raw
     },
@@ -43,13 +44,13 @@ export async function processMeeting(dir, settings, modelsDir, onProgress = () =
   }
 }
 
-export async function testTranscription(config, modelsDir, onStatus = () => {}) {
+export async function testTranscription(config, modelsDir, onStatus = () => {}, transcribeAudio = transcribe) {
   // The packaged sample sits inside app.asar, which sherpa-onnx's native file reader cannot open.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'note-taker-test-'))
   const audioPath = path.join(dir, FILES.audio)
   fs.writeFileSync(audioPath, fs.readFileSync(SAMPLE_AUDIO))
   try {
-    const transcript = await transcribe(audioPath, withTestLimits(config), modelsDir, onStatus)
+    const transcript = await transcribeAudio(audioPath, withTestLimits(config), modelsDir, onStatus)
     if (!transcript) throw new Error('Nenhuma fala foi reconhecida no áudio de teste.')
     return transcript.replace(/^\[[\d:]+\] /gm, '')
   } finally {
@@ -57,7 +58,7 @@ export async function testTranscription(config, modelsDir, onStatus = () => {}) 
   }
 }
 
-async function transcribe(audioPath, config, modelsDir, onStatus) {
+export async function transcribe(audioPath, config, modelsDir, onStatus) {
   const local = config.provider === 'local'
   const models = await ensureModels(modelsDir, local ? LOCAL_ASR_MODELS : VAD_MODEL, onStatus)
 

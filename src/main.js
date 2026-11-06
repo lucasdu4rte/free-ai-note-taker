@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, nativeTheme, net, safeStorage, screen, session, shell } from 'electron'
+import { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, nativeTheme, net, safeStorage, screen, session, shell, utilityProcess } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -151,11 +151,27 @@ ipcMain.handle('recording:stop', () => {
   return null
 })
 
+// The Parakeet model and the meeting's audio take well over 1 GB of native memory that ONNX Runtime keeps after use.
+// Transcribing in a child process that is killed afterwards gives all of it back to the system.
+function transcribeInWorker(audioPath, config, modelsDir, onStatus) {
+  return new Promise((resolve, reject) => {
+    const child = utilityProcess.fork(path.join(import.meta.dirname, 'transcribe-worker.js'))
+    child.on('message', ({ status, transcript, error }) => {
+      if (status) return onStatus(status)
+      child.kill()
+      if (error) reject(new Error(error))
+      else resolve(transcript)
+    })
+    child.on('exit', (code) => reject(new Error(`A transcrição parou de repente (código ${code}).`)))
+    child.postMessage({ audioPath, config, modelsDir })
+  })
+}
+
 ipcMain.handle('meeting:process', async (event, id, from) => {
   // Processing the WAV still being written would cache a partial raw transcript for the real run after Parar.
   if (id === recording?.id) throw new Error('Pare a gravação antes de processar esta reunião.')
   const report = (step, detail) => event.sender.send('meeting:progress', id, step, detail)
-  await processMeeting(meetingDir(id), await loadSettings(), modelsDir(), report, from)
+  await processMeeting(meetingDir(id), await loadSettings(), modelsDir(), report, from, transcribeInWorker)
 })
 
 ipcMain.handle('meetings:list', () => {
@@ -198,7 +214,7 @@ ipcMain.handle('app:version', () => app.getVersion())
 ipcMain.handle('settings:save', (_event, settings) => saveSettings(settings))
 ipcMain.handle('settings:test', (event, section, config) => {
   if (section === 'llm') return testLlm(config)
-  return testTranscription(config, modelsDir(), (status) => event.sender.send('settings:test-status', section, status))
+  return testTranscription(config, modelsDir(), (status) => event.sender.send('settings:test-status', section, status), transcribeInWorker)
 })
 
 ipcMain.handle('overlay:get-state', () => overlayState)
