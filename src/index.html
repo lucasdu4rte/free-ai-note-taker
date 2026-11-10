@@ -158,6 +158,13 @@
       .setting small.ok { color: var(--ok); }
       .setting small.busy { color: var(--accent); }
       .setting small.error { color: var(--rec); }
+      .setting input.switch { appearance: none; position: relative; flex-shrink: 0; width: 38px; min-height: 22px; height: 22px; padding: 0; border-radius: 999px; background: var(--border); cursor: pointer; }
+      .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--bg); transition: transform 0.15s; }
+      .setting input.switch:checked { border-color: var(--accent); background: var(--accent); }
+      .switch:checked::after { transform: translateX(16px); }
+      .setting input.port { width: 100px; }
+      .command-row { flex-wrap: wrap; padding-bottom: 12px; }
+      .command-row code { flex-basis: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); font-size: 12px; overflow-wrap: anywhere; user-select: all; }
       .groups { display: flex; flex-direction: column; gap: 10px; }
       .llm-title { font-weight: 600; }
       .add-btn { align-self: flex-start; min-height: 30px; padding: 0 14px; border: 1px dashed var(--border); border-radius: 6px; background: transparent; color: var(--accent); font-weight: 600; }
@@ -264,6 +271,18 @@
             <h2>Aparência</h2>
             <div class="group">
               <label class="setting"><span>Tema</span><select id="theme"><option value="system">Automático (igual ao sistema)</option><option value="light">Claro</option><option value="dark">Escuro</option></select></label>
+            </div>
+          </section>
+          <section>
+            <h2>Conectar MCP</h2>
+            <div class="group">
+              <label class="setting"><span>Ligar servidor MCP<small id="mcp-result" role="status"></small></span><input type="checkbox" id="mcp-enabled" class="switch" role="switch" /></label>
+              <label class="setting"><span>Porta<small>A padrão é 47615. Troque se outro programa já usa essa</small></span><input type="number" id="mcp-port" class="port" min="1024" max="65535" /></label>
+              <div class="setting command-row"><span>Endereço<small>Para qualquer app que aceite MCP por HTTP</small></span><button type="button" class="test-btn" data-copy="mcp-url">Copiar</button><code id="mcp-url"></code></div>
+            </div>
+            <div class="group">
+              <div class="setting command-row"><span>Claude Code<small>Cole uma vez no terminal. Depois basta o app estar aberto</small></span><button type="button" class="test-btn" data-copy="mcp-http-command">Copiar</button><code id="mcp-http-command"></code></div>
+              <div id="mcp-wsl-row" class="setting command-row"><span>Claude Code no WSL<small>Cole uma vez no terminal do WSL</small></span><button type="button" class="test-btn" data-copy="mcp-wsl-command">Copiar</button><code id="mcp-wsl-command"></code></div>
             </div>
           </section>
           <section>

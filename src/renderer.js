@@ -548,6 +548,44 @@ $('#check-update').onclick = () =>
   })
 $('#theme').onchange = () => api.setTheme($('#theme').value)
 
+function mcpStatusLine({ running, error, port }) {
+  if (error === 'port-taken') return [`✗ A porta ${port} já está em uso. Escolha outra.`, 'error']
+  if (error) return [`✗ ${error}`, 'error']
+  if (running) return [`✓ Ligado na porta ${port}. Só este computador acessa.`, 'ok']
+  return ['Desligado. Nenhum app de IA vê suas reuniões.', '']
+}
+
+function renderMcp(status) {
+  $('#mcp-enabled').checked = status.enabled
+  $('#mcp-port').value = status.port
+  $('#mcp-url').textContent = status.url
+  $('#mcp-http-command').textContent = status.httpCommand
+  $('#mcp-wsl-command').textContent = status.wslCommand ?? ''
+  $('#mcp-wsl-row').hidden = !status.wslCommand
+  const [text, tone] = mcpStatusLine(status)
+  $('#mcp-result').textContent = text
+  $('#mcp-result').className = tone
+}
+
+async function saveMcp() {
+  try {
+    renderMcp(await api.setMcp($('#mcp-enabled').checked, Number($('#mcp-port').value)))
+  } catch (error) {
+    $('#mcp-result').textContent = `✗ ${errorText(error)}`
+    $('#mcp-result').className = 'error'
+  }
+}
+
+$('#mcp-enabled').onchange = saveMcp
+$('#mcp-port').onchange = saveMcp
+document.querySelectorAll('[data-copy]').forEach((button) => {
+  button.onclick = async () => {
+    await navigator.clipboard.writeText($(`#${button.dataset.copy}`).textContent)
+    button.textContent = 'Copiado'
+    setTimeout(() => (button.textContent = 'Copiar'), 1500)
+  }
+})
+
 api.onMeetingProgress((id, step, detail) => setRun(id, { step, detail }))
 api.onToggleRecording(toggleRecording)
 api.onShowSettings(() => showView('settings'))
@@ -592,6 +630,7 @@ $('#change-shortcut').onclick = changeShortcut
 renderShortcut(await api.shortcut())
 $('#app-version').textContent = await api.version()
 $('#theme').value = await api.theme()
+renderMcp(await api.mcpStatus())
 
 await refreshList()
 if (meetings.length) await showMeeting(meetings[0].id)

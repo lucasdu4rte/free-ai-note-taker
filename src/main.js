@@ -8,6 +8,7 @@ import { FILES, completedSteps, processMeeting, readIfExists, testTranscription 
 import { testLlm } from './llm.js'
 import { parseSummary, shortcutLabel, summaryPreview, toggleTask } from './notes.js'
 import { HEADER_BYTES, SAMPLE_RATE, floatToInt16, repairWavHeader, wavHeader } from './wav.js'
+import { DEFAULT_MCP_PORT, httpCommand, isValidPort, mcpUrl, startMcpServer, wslCommand } from './mcp.js'
 
 // Chromium's network stack honours the Windows proxy/PAC settings that corporate networks rely on.
 globalThis.fetch = net.fetch
@@ -25,6 +26,7 @@ const modelsDir = () => path.join(app.getPath('userData'), 'models')
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
 const shortcutFile = () => path.join(app.getPath('userData'), 'shortcut.txt')
 const themeFile = () => path.join(app.getPath('userData'), 'theme.txt')
+const mcpFile = () => path.join(app.getPath('userData'), 'mcp.json')
 const updateLogFile = () => path.join(app.getPath('userData'), 'update.log')
 const preload = path.join(import.meta.dirname, 'preload.cjs')
 
@@ -175,17 +177,22 @@ ipcMain.handle('meeting:process', async (event, id, from) => {
   await processMeeting(meetingDir(id), await loadSettings(), modelsDir(), report, from, transcribeInWorker)
 })
 
-ipcMain.handle('meetings:list', () => {
+function listMeetings() {
   fs.mkdirSync(notesDir(), { recursive: true })
   return fs.readdirSync(notesDir()).filter((name) => MEETING_ID.test(name) && name !== recording?.id).sort().reverse().map(meetingInfo)
-})
+}
+
+function readMeetingText(id) {
+  const file = (name) => readIfExists(path.join(meetingDir(id), name))
+  return { summary: file(FILES.summary), transcript: file(FILES.transcript) ?? file(FILES.rawTranscript) }
+}
+
+ipcMain.handle('meetings:list', listMeetings)
 
 ipcMain.handle('meeting:read', (_event, id) => {
-  const file = (name) => readIfExists(path.join(meetingDir(id), name))
   const audio = path.join(meetingDir(id), FILES.audio)
   return {
-    summary: file(FILES.summary),
-    transcript: file(FILES.transcript) ?? file(FILES.rawTranscript),
+    ...readMeetingText(id),
     audioUrl: fs.existsSync(audio) ? pathToFileURL(audio).href : undefined,
     done: completedSteps(meetingDir(id)),
   }
@@ -285,6 +292,7 @@ app.whenReady().then(() => {
   if (app.isPackaged) watchUpdates()
 
   registerShortcut(readIfExists(shortcutFile())?.trim() || DEFAULT_SHORTCUT)
+  mcpStarting = applyMcpConfig(loadMcpConfig())
 })
 
 let shortcut = null
@@ -315,6 +323,61 @@ ipcMain.handle('app:theme-set', (_event, theme) => {
   if (!THEMES.includes(theme)) throw new Error(`Tema inválido: ${theme}`)
   nativeTheme.themeSource = theme
   fs.writeFileSync(themeFile(), theme)
+})
+
+const mcpMeetings = {
+  list: listMeetings,
+  read: (id) => {
+    if (id === recording?.id || !fs.existsSync(meetingDir(id))) throw new Error(`Reunião não encontrada: ${id}`)
+    return readMeetingText(id)
+  },
+}
+let mcpServer = null
+let mcpError = null
+let mcpStarting = Promise.resolve()
+
+function loadMcpConfig() {
+  const saved = JSON.parse(readIfExists(mcpFile()) ?? '{}')
+  return { enabled: saved.enabled === true, port: isValidPort(saved.port) ? saved.port : DEFAULT_MCP_PORT }
+}
+
+async function applyMcpConfig({ enabled, port }) {
+  await new Promise((resolve) => (mcpServer ? mcpServer.close(resolve) : resolve()))
+  mcpServer = null
+  mcpError = null
+  if (!enabled) return
+  try {
+    mcpServer = await startMcpServer(port, mcpMeetings, app.getVersion())
+  } catch (error) {
+    mcpError = error.code === 'EADDRINUSE' ? 'port-taken' : error.message
+  }
+}
+
+// The portable .exe unpacks itself to a new temp folder on each run, so a path saved in Claude Code would break.
+const canBridgeFromWsl = () => process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_FILE
+
+function mcpStatus() {
+  const { enabled, port } = loadMcpConfig()
+  return {
+    enabled,
+    port,
+    running: Boolean(mcpServer),
+    error: mcpError,
+    url: mcpUrl(port),
+    httpCommand: httpCommand(port),
+    wslCommand: canBridgeFromWsl() ? wslCommand(port, process.execPath, path.join(import.meta.dirname, 'mcp-bridge.cjs')) : null,
+  }
+}
+
+ipcMain.handle('mcp:status', async () => {
+  await mcpStarting
+  return mcpStatus()
+})
+ipcMain.handle('mcp:set', async (_event, enabled, port) => {
+  if (typeof enabled !== 'boolean' || !isValidPort(port)) throw new Error('Use uma porta entre 1024 e 65535.')
+  fs.writeFileSync(mcpFile(), JSON.stringify({ enabled, port }))
+  await applyMcpConfig({ enabled, port })
+  return mcpStatus()
 })
 
 app.on('will-quit', () => globalShortcut.unregisterAll())
