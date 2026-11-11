@@ -1,7 +1,7 @@
 {
   "name": "free-ai-note-taker",
   "productName": "Free AI Note Taker",
-  "version": "0.7.4",
+  "version": "0.8.0",
   "description": "Grava reuniões (Teams, Meet, Zoom), transcreve localmente ou na nuvem e gera resumo com IA.",
   "author": "Lucas Duarte",
   "main": "src/main.js",
