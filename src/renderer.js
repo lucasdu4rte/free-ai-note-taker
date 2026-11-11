@@ -37,6 +37,7 @@ const combos = new WeakMap()
 
 const captureSystemAudio = api.platform === 'win32'
 const SHORT_RECORDING_NOTICE_MS = 4000
+const DEVICE_SETTLE_MS = 800
 
 async function withLoading(button, task) {
   button.disabled = true
@@ -68,21 +69,15 @@ async function startRecording(attempt) {
   try {
     await context.audioWorklet.addModule('recorder-worklet.js')
     throwIfCancelled()
-    streams.push(await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }))
+    streams.push(...(await captureAudio()))
     throwIfCancelled()
-    if (captureSystemAudio) {
-      const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-      screen.getVideoTracks().forEach((track) => track.stop())
-      streams.push(screen)
-      throwIfCancelled()
-    }
   } catch (error) {
     releaseAudio(context, streams)
     throw error
   }
   // channelCount 1 makes Web Audio mix the mic and the system audio down to one mono track.
   const recorder = new AudioWorkletNode(context, 'recorder', { channelCount: 1, channelCountMode: 'explicit' })
-  for (const stream of streams) context.createMediaStreamSource(stream).connect(recorder)
+  const sources = connectSources(context, streams, recorder)
   recorder.connect(context.destination)
   const id = await api.startRecording()
   if (attempt.cancelled) {
@@ -93,7 +88,55 @@ async function startRecording(attempt) {
   }
   // The worklet sends audio chunks every 250 ms and, in between, a level number every 50 ms for the overlay.
   recorder.port.onmessage = ({ data }) => (typeof data === 'number' ? api.sendLevel(data) : api.sendAudio(data))
-  return { id, context, streams }
+  return { id, context, streams, sources, recorder, micMuted: false }
+}
+
+// The mic comes first: muting disables streams[0].
+async function captureAudio() {
+  const streams = [await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })]
+  if (!captureSystemAudio) return streams
+  try {
+    const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+    screen.getVideoTracks().forEach((track) => track.stop())
+    streams.push(screen)
+    return streams
+  } catch (error) {
+    streams[0].getTracks().forEach((track) => track.stop())
+    throw error
+  }
+}
+
+function connectSources(context, streams, recorder) {
+  return streams.map((stream) => {
+    const source = context.createMediaStreamSource(stream)
+    source.connect(recorder)
+    return source
+  })
+}
+
+const applyMicMute = ({ streams, micMuted }) => streams[0].getAudioTracks().forEach((track) => (track.enabled = !micMuted))
+
+// A capture stays tied to the devices that were default when it opened, so plugging or unplugging a headset
+// left the recording silent. Reopening on the new defaults keeps the same file and recorder going.
+async function followDefaultAudioDevices() {
+  const current = recording
+  if (!current) return
+  let streams
+  try {
+    streams = await captureAudio()
+  } catch (error) {
+    console.error('Could not switch the audio devices:', error)
+    return
+  }
+  if (recording !== current) {
+    streams.flatMap((stream) => stream.getTracks()).forEach((track) => track.stop())
+    return
+  }
+  current.sources.forEach((source) => source.disconnect())
+  current.streams.flatMap((stream) => stream.getTracks()).forEach((track) => track.stop())
+  current.streams = streams
+  current.sources = connectSources(current.context, streams, current.recorder)
+  applyMicMute(current)
 }
 
 function releaseAudio(context, streams) {
@@ -830,6 +873,13 @@ $('#check-update').onclick = () =>
     }
   })
 $('#theme').onchange = () => api.setTheme($('#theme').value)
+const renderOverlayOpacity = (percent) => ($('#overlay-opacity-value').textContent = `${percent}%`)
+$('#overlay-opacity').oninput = (event) => {
+  event.stopPropagation()
+  const percent = Number($('#overlay-opacity').value)
+  renderOverlayOpacity(percent)
+  api.setOverlayOpacity(percent)
+}
 
 function mcpStatusLine({ running, error, port }) {
   if (error === 'port-taken') return [`✗ A porta ${port} já está em uso. Escolha outra.`, 'error']
@@ -873,7 +923,17 @@ document.querySelectorAll('[data-copy]').forEach((button) => {
 api.onMeetingProgress((id, step, detail) => setRun(id, { step, detail }))
 api.onToggleRecording(toggleRecording)
 // Only the mic track is disabled, so the PC audio keeps being recorded while the mic is muted.
-api.onMicMuted((muted) => recording?.streams[0].getAudioTracks().forEach((track) => (track.enabled = !muted)))
+api.onMicMuted((muted) => {
+  if (!recording) return
+  recording.micMuted = muted
+  applyMicMute(recording)
+})
+let deviceChangeTimer
+// Plugging a headset fires several devicechange events in a row; reopen once they settle.
+navigator.mediaDevices.ondevicechange = () => {
+  clearTimeout(deviceChangeTimer)
+  deviceChangeTimer = setTimeout(followDefaultAudioDevices, DEVICE_SETTLE_MS)
+}
 api.onShowSettings(() => showView('settings'))
 
 const settings = await api.getSettings()
@@ -917,6 +977,8 @@ $('#change-shortcut').onclick = changeShortcut
 renderShortcut(await api.shortcut())
 $('#app-version').textContent = await api.version()
 $('#theme').value = await api.theme()
+$('#overlay-opacity').value = await api.overlayOpacity()
+renderOverlayOpacity(Number($('#overlay-opacity').value))
 syncCombobox($('#theme'))
 renderMcp(await api.mcpStatus())
 

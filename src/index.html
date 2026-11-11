@@ -148,6 +148,7 @@
       .setting select, .setting input { width: 300px; min-height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
       .hint { margin: 0 4px; font-size: 12px; color: var(--muted); }
       .setting > .version { flex-grow: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+      .setting input.range { width: 220px; min-height: 0; padding: 0; border: 0; background: transparent; accent-color: var(--accent); }
       .setting > .secret { position: relative; display: block; flex: 0 0 300px; }
       .combo { position: relative; flex: 0 0 300px; }
       .combo-trigger { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); text-align: left; }
@@ -286,6 +287,7 @@
           <section>
             <h2>Aparência</h2>
             <div class="group">
+              <div class="setting"><span>Opacidade do flutuante<small>Quanto o fundo da barra de gravação cobre o que está atrás</small></span><output id="overlay-opacity-value" class="version"></output><input type="range" id="overlay-opacity" class="range" min="30" max="100" step="5" aria-label="Opacidade do flutuante" /></div>
               <div class="setting"><span>Tema</span><select id="theme"><option value="system">Automático (igual ao sistema)</option><option value="light">Claro</option><option value="dark">Escuro</option></select></div>
             </div>
           </section>

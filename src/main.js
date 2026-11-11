@@ -17,16 +17,19 @@ const MEETING_ID = /^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/
 // Ctrl+Shift+R would steal the browsers' hard-reload shortcut system-wide.
 const DEFAULT_SHORTCUT = 'CommandOrControl+Alt+R'
 const OVERLAY_SIZE = { width: 640, height: 112, bottomMargin: 24 }
+const COLLAPSED_OVERLAY_SIZE = { width: 96, height: 64 }
 const MAX_TITLE_LENGTH = 120
 const MIN_RECORDING_SECONDS = 3
 const MODELS_TIMEOUT_MS = 3000
 const THEMES = ['system', 'light', 'dark']
+const OVERLAY_OPACITY = { min: 30, max: 100, default: 70 }
 
 const notesDir = () => path.join(app.getPath('documents'), 'Free AI Note Taker')
 const modelsDir = () => path.join(app.getPath('userData'), 'models')
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
 const shortcutFile = () => path.join(app.getPath('userData'), 'shortcut.txt')
 const themeFile = () => path.join(app.getPath('userData'), 'theme.txt')
+const overlayOpacityFile = () => path.join(app.getPath('userData'), 'overlay-opacity.txt')
 const mcpFile = () => path.join(app.getPath('userData'), 'mcp.json')
 const updateLogFile = () => path.join(app.getPath('userData'), 'update.log')
 const preload = path.join(import.meta.dirname, 'preload.cjs')
@@ -75,6 +78,7 @@ async function saveSettings(settings) {
 let win
 let overlay
 let overlayState = { phase: 'hidden' }
+let overlayCollapsed = false
 let recording = null
 
 function createOverlay() {
@@ -97,6 +101,20 @@ function createOverlay() {
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   window.loadFile(path.join(import.meta.dirname, 'overlay.html'))
   return window
+}
+
+// Keeps the bar's bottom-center where it is, so a bar the user dragged away stays there, and keeps it on screen.
+function resizeOverlay(collapsed) {
+  const { width, height } = collapsed ? COLLAPSED_OVERLAY_SIZE : OVERLAY_SIZE
+  const current = overlay.getBounds()
+  const { workArea } = screen.getDisplayMatching(current)
+  const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
+  overlay.setBounds({
+    width,
+    height,
+    x: clamp(Math.round(current.x + (current.width - width) / 2), workArea.x, workArea.x + workArea.width - width),
+    y: clamp(current.y + current.height - height, workArea.y, workArea.y + workArea.height - height),
+  })
 }
 
 function showOverlay(state) {
@@ -133,6 +151,7 @@ ipcMain.handle('recording:start', async () => {
     startedAt: Date.now(),
     systemAudio,
     micMuted: false,
+    collapsed: overlayCollapsed,
     llm: LLM_PRESETS[llm.provider]?.label.split(' (')[0] ?? llm.model,
   })
   return id
@@ -250,6 +269,12 @@ ipcMain.on('overlay:toggle-mic', () => {
   win.webContents.send('recording:mic-muted', micMuted)
   showOverlay({ ...overlayState, micMuted })
 })
+ipcMain.on('overlay:collapse', (_event, collapsed) => {
+  if (overlayState.phase !== 'recording' || typeof collapsed !== 'boolean') return
+  overlayCollapsed = collapsed
+  resizeOverlay(collapsed)
+  showOverlay({ ...overlayState, collapsed })
+})
 ipcMain.on('overlay:open-settings', () => focusMainWindow('settings:show'))
 
 // Updates come from this repo's GitHub Releases (latest.yml). A downloaded update installs when the app quits,
@@ -343,6 +368,12 @@ ipcMain.handle('app:shortcut-set', (_event, accelerator) => {
 })
 
 ipcMain.handle('app:theme', () => nativeTheme.themeSource)
+ipcMain.handle('overlay:opacity', () => Number(readIfExists(overlayOpacityFile())) || OVERLAY_OPACITY.default)
+ipcMain.handle('overlay:opacity-set', (_event, percent) => {
+  if (!Number.isInteger(percent) || percent < OVERLAY_OPACITY.min || percent > OVERLAY_OPACITY.max) throw new Error(`Opacidade inválida: ${percent}`)
+  fs.writeFileSync(overlayOpacityFile(), String(percent))
+  overlay.webContents.send('overlay:opacity', percent)
+})
 ipcMain.handle('app:theme-set', (_event, theme) => {
   if (!THEMES.includes(theme)) throw new Error(`Tema inválido: ${theme}`)
   nativeTheme.themeSource = theme

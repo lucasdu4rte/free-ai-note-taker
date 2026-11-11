@@ -5,6 +5,7 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
     <title>Gravação</title>
     <style>
+      :root { --opacity: 0.7; }
       html, body { height: 100%; margin: 0; overflow: hidden; background: transparent; }
       body { color: #f2f2f2; font: 13px/18px 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif; user-select: none; }
       button { font: inherit; cursor: pointer; -webkit-app-region: no-drag; }
@@ -12,22 +13,27 @@
       [hidden] { display: none !important; }
       .wrap { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; padding-bottom: 4px; box-sizing: border-box; }
       .chips { display: flex; gap: 6px; }
-      .chip { min-height: 26px; padding: 0 10px; border: 1px solid #2c2c30; border-radius: 999px; background: #1a1a1c; color: #f2f2f2; font-size: 12px; }
-      .chip:hover { background: #242427; }
-      .bar { -webkit-app-region: drag; display: flex; align-items: center; gap: 12px; width: 600px; box-sizing: border-box; min-height: 52px; padding: 8px 8px 8px 10px; border-radius: 16px; border: 1px solid #2c2c30; background: #0c0c0d; }
-      .logo { position: relative; flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9px; background: #f2f2f2; color: #0c0c0d; }
-      .badge { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #ff5a52; border: 2px solid #0c0c0d; animation: pulse 1.4s ease-in-out infinite; }
+      .chip { min-height: 26px; padding: 0 10px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 999px; background: rgba(26, 26, 28, var(--opacity)); color: #f2f2f2; font-size: 12px; }
+      .chip:hover { background: rgba(36, 36, 39, 0.85); }
+      .bar { -webkit-app-region: drag; display: flex; align-items: center; gap: 12px; width: 600px; box-sizing: border-box; min-height: 52px; padding: 8px 8px 8px 10px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(12, 12, 13, var(--opacity)); }
+      .logo { position: relative; flex-shrink: 0; display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: #f2f2f2; font-size: 11px; font-weight: 800; letter-spacing: 0.04em; }
+      .logo::before, .logo::after { content: ''; position: absolute; top: 4px; bottom: 4px; width: 4px; border: 1.5px solid currentColor; }
+      .logo::before { left: 0; border-right: 0; }
+      .logo::after { right: 0; border-left: 0; }
+      .logo:hover { background: rgba(255, 255, 255, 0.1); }
+      .bar.collapsed { width: auto; padding: 8px; gap: 0; }
+      .badge { width: 7px; height: 7px; border-radius: 50%; background: #ff5a52; animation: rec-pulse 1.4s ease-out infinite; }
       .wave { display: flex; align-items: center; gap: 2px; height: 24px; }
       .wave span { display: block; width: 3px; height: 3px; border-radius: 2px; background: #f2f2f2; transition: height 50ms linear; }
       .sources { flex-grow: 1; display: flex; align-items: center; gap: 12px; color: #a3a3a8; }
-      .mic { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid #2c2c30; border-radius: 10px; background: #1a1a1c; color: #f2f2f2; }
-      .mic:hover { background: #242427; }
+      .mic { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; background: rgba(255, 255, 255, 0.06); color: #f2f2f2; }
+      .mic:hover { background: rgba(255, 255, 255, 0.12); }
       .mic[aria-pressed="true"] { background: #3a1716; border-color: #ff5a52; color: #ff5a52; }
       .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
       .action { min-height: 34px; padding: 0 14px; border: 0; border-radius: 10px; background: #f2f2f2; color: #0c0c0d; font-weight: 600; }
       .action.stop { display: flex; align-items: center; gap: 8px; }
       .stop-icon { width: 8px; height: 8px; border-radius: 2px; background: currentColor; }
-      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+      @keyframes rec-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 90, 82, 0.7); } 100% { box-shadow: 0 0 0 6px rgba(255, 90, 82, 0); } }
       @media (prefers-reduced-motion: reduce) { .badge { animation: none; } .wave span { transition: none; } }
     </style>
   </head>
@@ -36,13 +42,12 @@
       <div id="chips" class="chips" hidden>
         <button id="chip-llm" class="chip" title="Abrir as configurações"></button>
       </div>
-      <div class="bar" role="group" aria-label="Gravação da reunião">
-        <span class="logo" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
-          <span id="badge" class="badge" hidden></span>
-        </span>
+      <div id="bar" class="bar" role="group" aria-label="Gravação da reunião">
+        <button id="logo" class="logo" aria-expanded="true" aria-label="Minimizar a barra" title="Minimizar a barra">
+          <span id="badge" class="badge" aria-hidden="true" hidden></span><span aria-hidden="true">REC</span>
+        </button>
         <span id="wave" class="wave" aria-hidden="true" hidden></span>
-        <div class="sources">
+        <div id="sources" class="sources">
           <button id="mic" class="mic" aria-pressed="false" aria-label="Mutar microfone" title="Mutar microfone">
             <svg id="mic-on" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
             <svg id="mic-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" hidden><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M3 3l18 18"></path></svg>
