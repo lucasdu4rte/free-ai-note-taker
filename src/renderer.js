@@ -823,6 +823,7 @@ function renderMcp(status) {
   $('#mcp-http-command').textContent = status.httpCommand
   $('#mcp-wsl-command').textContent = status.wslCommand ?? ''
   $('#mcp-wsl-row').hidden = !status.wslCommand
+  document.querySelectorAll('.mcp-option').forEach((option) => (option.hidden = !status.enabled))
   const [text, tone] = mcpStatusLine(status)
   $('#mcp-result').textContent = text
   $('#mcp-result').className = tone

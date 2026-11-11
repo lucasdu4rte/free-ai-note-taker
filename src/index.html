@@ -293,10 +293,10 @@
             <h2>Conectar MCP</h2>
             <div class="group">
               <label class="setting"><span>Ligar servidor MCP<small id="mcp-result" role="status"></small></span><input type="checkbox" id="mcp-enabled" class="switch" role="switch" /></label>
-              <label class="setting"><span>Porta<small>A padrão é 47615. Troque se outro programa já usa essa</small></span><input type="number" id="mcp-port" class="port" min="1024" max="65535" /></label>
-              <div class="setting command-row"><span>Endereço<small>Para qualquer app que aceite MCP por HTTP</small></span><button type="button" class="test-btn" data-copy="mcp-url">Copiar</button><code id="mcp-url"></code></div>
+              <label class="setting mcp-option"><span>Porta<small>A padrão é 47615. Troque se outro programa já usa essa</small></span><input type="number" id="mcp-port" class="port" min="1024" max="65535" /></label>
+              <div class="setting command-row mcp-option"><span>Endereço<small>Para qualquer app que aceite MCP por HTTP</small></span><button type="button" class="test-btn" data-copy="mcp-url">Copiar</button><code id="mcp-url"></code></div>
             </div>
-            <div class="group">
+            <div class="group mcp-option">
               <div class="setting command-row"><span>Claude Code<small>Cole uma vez no terminal. Depois basta o app estar aberto</small></span><button type="button" class="test-btn" data-copy="mcp-http-command">Copiar</button><code id="mcp-http-command"></code></div>
               <div id="mcp-wsl-row" class="setting command-row"><span>Claude Code no WSL<small>Cole uma vez no terminal do WSL</small></span><button type="button" class="test-btn" data-copy="mcp-wsl-command">Copiar</button><code id="mcp-wsl-command"></code></div>
             </div>
