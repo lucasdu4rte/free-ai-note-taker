@@ -78,3 +78,14 @@ export function acceleratorFromKey({ code, ctrlKey, metaKey, altKey, shiftKey })
   const modifiers = [ctrlKey || metaKey ? 'CommandOrControl' : '', altKey ? 'Alt' : '', shiftKey ? 'Shift' : '']
   return [...modifiers.filter(Boolean), key].join('+')
 }
+
+const megabytes = (bytes) => `${(bytes / 1e6).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`
+
+export const downloadSize = megabytes
+
+export function downloadProgressText({ transferred, total, bytesPerSecond }) {
+  const left = Math.max(0, total - transferred)
+  const parts = [`${megabytes(transferred)} de ${megabytes(total)}`, `faltam ${megabytes(left)}`]
+  if (bytesPerSecond > 0) parts.push(`${megabytes(bytesPerSecond)}/s`, `~${Math.ceil(left / bytesPerSecond)} s`)
+  return parts.join(' · ')
+}

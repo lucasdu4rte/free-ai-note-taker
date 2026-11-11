@@ -279,10 +279,17 @@ ipcMain.on('overlay:open-settings', () => focusMainWindow('settings:show'))
 
 // Updates come from this repo's GitHub Releases (latest.yml). A downloaded update installs when the app quits,
 // so it never cuts a recording short; the sidebar also offers to restart right away.
+// Downloads wait for the user: on a metered connection they may not want the installer's megabytes right now.
+let updateDownload = null
+const updateSummary = (info) => ({ version: info.version, bytes: info.files?.[0]?.size ?? 0 })
+
 function watchUpdates() {
   const { autoUpdater } = electronUpdater
   const logTo = (level) => (message) => fs.appendFileSync(updateLogFile(), `${new Date().toISOString()} ${level} ${message}\n`)
   autoUpdater.logger = { info: logTo('info'), warn: logTo('warn'), error: logTo('error'), debug: () => {} }
+  autoUpdater.autoDownload = false
+  autoUpdater.on('update-available', (info) => win.webContents.send('update:available', updateSummary(info)))
+  autoUpdater.on('download-progress', ({ transferred, total, bytesPerSecond }) => win.webContents.send('update:progress', { transferred, total, bytesPerSecond }))
   autoUpdater.on('update-downloaded', ({ version }) => win.webContents.send('update:ready', version))
   autoUpdater.on('error', (error) => console.error('Update failed:', error.message))
   autoUpdater.checkForUpdates().catch(() => {})
@@ -292,8 +299,26 @@ ipcMain.handle('update:check', async () => {
   if (!app.isPackaged) throw new Error('A busca de atualização só funciona no app instalado.')
   const result = await electronUpdater.autoUpdater.checkForUpdates()
   const latest = result?.updateInfo.version ?? app.getVersion()
-  return { latest, available: latest !== app.getVersion() }
+  return { latest, available: latest !== app.getVersion(), bytes: result ? updateSummary(result.updateInfo).bytes : 0 }
 })
+
+ipcMain.handle('update:download', async () => {
+  if (updateDownload) return { cancelled: false }
+  const token = new electronUpdater.CancellationToken()
+  updateDownload = token
+  try {
+    await electronUpdater.autoUpdater.downloadUpdate(token)
+    return { cancelled: false }
+  } catch (error) {
+    if (token.cancelled) return { cancelled: true }
+    throw error
+  } finally {
+    updateDownload = null
+  }
+})
+
+ipcMain.on('update:cancel', () => updateDownload?.cancel())
+ipcMain.on('app:open-sound-settings', () => shell.openExternal('ms-settings:sound'))
 
 ipcMain.on('update:install', () => {
   if (recording) return

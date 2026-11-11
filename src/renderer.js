@@ -1,5 +1,5 @@
 import { LLM_PRESETS, TRANSCRIPTION_PRESETS, fromPreset, llmFromPreset } from './presets.js'
-import { STEPS, acceleratorFromKey, parseSummary, parseTranscript, stepStates } from './notes.js'
+import { STEPS, acceleratorFromKey, downloadProgressText, downloadSize, parseSummary, parseTranscript, stepStates } from './notes.js'
 
 const { api } = window
 const $ = (selector) => document.querySelector(selector)
@@ -38,6 +38,7 @@ const combos = new WeakMap()
 const captureSystemAudio = api.platform === 'win32'
 const SHORT_RECORDING_NOTICE_MS = 4000
 const DEVICE_SETTLE_MS = 800
+const MIC_STORAGE_KEY = 'micDeviceId'
 
 async function withLoading(button, task) {
   button.disabled = true
@@ -93,7 +94,10 @@ async function startRecording(attempt) {
 
 // The mic comes first: muting disables streams[0].
 async function captureAudio() {
-  const streams = [await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })]
+  const micId = chosenMic()
+  // ideal, not exact: an unplugged mic falls back to the system default instead of failing the recording.
+  const mic = { deviceId: micId ? { ideal: micId } : undefined, echoCancellation: true, noiseSuppression: true }
+  const streams = [await navigator.mediaDevices.getUserMedia({ audio: mic })]
   if (!captureSystemAudio) return streams
   try {
     const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
@@ -809,10 +813,48 @@ $('#add-llm').onclick = () => {
 }
 $('#record').onclick = toggleRecording
 $('#update-install').onclick = () => api.installUpdate()
+
+let availableUpdate
+
+function showUpdateAvailable(update, note = '') {
+  availableUpdate = update
+  const size = update.bytes ? downloadSize(update.bytes) : ''
+  $('#update-result').textContent = note || `↓ A versão ${update.version} está disponível${size ? ` (${size})` : ''}. Baixe quando quiser.`
+  $('#update-result').className = note ? '' : 'ok'
+  $('#update-download').textContent = size ? `Baixar ${size}` : 'Baixar'
+  $('#update-download').hidden = false
+  $('#check-update').hidden = true
+  $('#update-progress-row').hidden = true
+  document.querySelector('.nav[data-view=settings]').classList.add('has-update')
+}
+
+function renderUpdateProgress(progress) {
+  $('#update-progress').max = progress.total || 1
+  $('#update-progress').value = progress.transferred
+  $('#update-progress-text').textContent = downloadProgressText(progress)
+}
+
+api.onUpdateAvailable((update) => showUpdateAvailable(update))
+api.onUpdateProgress(renderUpdateProgress)
+$('#update-cancel').onclick = () => api.cancelUpdate()
+$('#update-download').onclick = async () => {
+  $('#update-download').hidden = true
+  $('#update-progress-row').hidden = false
+  $('#update-progress-version').textContent = availableUpdate.version
+  renderUpdateProgress({ transferred: 0, total: availableUpdate.bytes, bytesPerSecond: 0 })
+  try {
+    const { cancelled } = await api.downloadUpdate()
+    if (cancelled) showUpdateAvailable(availableUpdate, 'Download cancelado. Nada foi instalado; baixe de novo quando quiser.')
+  } catch (error) {
+    showUpdateAvailable(availableUpdate, `✗ O download falhou: ${errorText(error)}`)
+  }
+}
 api.onUpdateReady((version) => {
   $('#update-result').textContent = `↓ A versão ${version} foi baixada e entra quando você fechar o app.`
   $('#update-result').className = 'ok'
   $('#check-update').hidden = true
+  $('#update-download').hidden = true
+  $('#update-progress-row').hidden = true
   $('#update-install').hidden = false
 })
 document.querySelectorAll('.nav').forEach((button) => (button.onclick = () => showView(button.dataset.view)))
@@ -864,8 +906,9 @@ $('#check-update').onclick = () =>
     result.className = 'busy'
     result.textContent = 'Procurando…'
     try {
-      const { latest, available } = await api.checkForUpdate()
-      result.textContent = available ? `↓ Baixando a versão ${latest}. Ela entra quando você fechar o app.` : `✓ Você já está na versão mais nova (${latest}).`
+      const { latest, available, bytes } = await api.checkForUpdate()
+      if (available) return showUpdateAvailable({ version: latest, bytes })
+      result.textContent = `✓ Você já está na versão mais nova (${latest}).`
       result.className = 'ok'
     } catch (error) {
       result.textContent = `✗ ${errorText(error)}`
@@ -873,6 +916,15 @@ $('#check-update').onclick = () =>
     }
   })
 $('#theme').onchange = () => api.setTheme($('#theme').value)
+$('#mic-device').onchange = () => {
+  try {
+    localStorage.setItem(MIC_STORAGE_KEY, $('#mic-device').value)
+  } catch (error) {
+    console.error('Could not remember the microphone:', error)
+  }
+}
+$('#open-sound-settings').onclick = () => api.openSoundSettings()
+$('#output-row').hidden = !captureSystemAudio
 const renderOverlayOpacity = (percent) => ($('#overlay-opacity-value').textContent = `${percent}%`)
 $('#overlay-opacity').oninput = (event) => {
   event.stopPropagation()
@@ -929,10 +981,62 @@ api.onMicMuted((muted) => {
   applyMicMute(recording)
 })
 let deviceChangeTimer
-// Plugging a headset fires several devicechange events in a row; reopen once they settle.
+// Plugging a headset fires several devicechange events in a row; react once they settle.
 navigator.mediaDevices.ondevicechange = () => {
   clearTimeout(deviceChangeTimer)
-  deviceChangeTimer = setTimeout(followDefaultAudioDevices, DEVICE_SETTLE_MS)
+  deviceChangeTimer = setTimeout(() => {
+    refreshAudioDevices()
+    followDefaultAudioDevices()
+  }, DEVICE_SETTLE_MS)
+}
+
+function chosenMic() {
+  try {
+    return localStorage.getItem(MIC_STORAGE_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+let knownDevices
+const isDeviceAlias = (device) => device.deviceId === 'default' || device.deviceId === 'communications'
+const deviceName = (device) => device?.label.replace(/^(Padrão|Default|Comunicações|Communications) - /, '') || 'outro aparelho'
+const defaultDevice = (devices, kind) => devices.find((device) => device.kind === kind && device.deviceId === 'default')
+
+async function refreshAudioDevices() {
+  const devices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind !== 'videoinput')
+  renderMicOptions(devices)
+  $('#output-hint').textContent = `Gravado da saída padrão do Windows, agora: ${deviceName(defaultDevice(devices, 'audiooutput'))}`
+  if (knownDevices) warnAboutNewAudioDevice(devices)
+  knownDevices = devices
+}
+
+function renderMicOptions(devices) {
+  const mics = devices.filter((device) => device.kind === 'audioinput' && !isDeviceAlias(device))
+  const select = $('#mic-device')
+  const chosen = chosenMic()
+  const missing = Boolean(chosen) && !mics.some((device) => device.deviceId === chosen)
+  select.replaceChildren(new Option('Padrão do sistema', ''), ...mics.map((device, index) => new Option(device.label || `Microfone ${index + 1}`, device.deviceId)))
+  select.value = missing ? '' : chosen
+  $('#mic-hint').textContent = missing ? 'O microfone escolhido não está conectado. Usando o padrão do sistema.' : 'Escolha o mesmo microfone que você usa na reunião'
+  syncCombobox(select)
+}
+
+// A headset only helps if it is what the app records from: the chosen (or default) mic and, on Windows, the default output.
+function warnAboutNewAudioDevice(devices) {
+  const known = new Set(knownDevices.map((device) => `${device.kind}:${device.deviceId}`))
+  const added = devices.filter((device) => !isDeviceAlias(device) && !known.has(`${device.kind}:${device.deviceId}`))
+  const output = added.find((device) => device.kind === 'audiooutput')
+  const mic = added.find((device) => device.kind === 'audioinput')
+  if (!output && !mic) return
+  const recordedMic = devices.find((device) => device.kind === 'audioinput' && device.deviceId === chosenMic()) ?? defaultDevice(devices, 'audioinput')
+  const recordedOutput = defaultDevice(devices, 'audiooutput')
+  const problems = []
+  if (captureSystemAudio && output && recordedOutput?.groupId !== output.groupId) problems.push(`O som da reunião continua sendo gravado de ${deviceName(recordedOutput)}: deixe o fone como saída padrão do Windows.`)
+  if (mic && recordedMic?.groupId !== mic.groupId) problems.push(`Sua voz continua sendo gravada por ${deviceName(recordedMic)}: escolha o microfone do fone nas configurações.`)
+  const body = problems.length ? problems.join(' ') : 'O app já grava por ele.'
+  const notification = new Notification(`${deviceName(output ?? mic)} conectado`, { body })
+  notification.onclick = () => api.overlay.openSettings()
 }
 api.onShowSettings(() => showView('settings'))
 
@@ -978,6 +1082,7 @@ renderShortcut(await api.shortcut())
 $('#app-version').textContent = await api.version()
 $('#theme').value = await api.theme()
 $('#overlay-opacity').value = await api.overlayOpacity()
+await refreshAudioDevices()
 renderOverlayOpacity(Number($('#overlay-opacity').value))
 syncCombobox($('#theme'))
 renderMcp(await api.mcpStatus())

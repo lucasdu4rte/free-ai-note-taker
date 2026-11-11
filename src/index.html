@@ -148,6 +148,10 @@
       .setting select, .setting input { width: 300px; min-height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
       .hint { margin: 0 4px; font-size: 12px; color: var(--muted); }
       .setting > .version { flex-grow: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+      .setting progress { flex-shrink: 0; width: 160px; height: 6px; border: 0; border-radius: 999px; overflow: hidden; background: var(--border); appearance: none; }
+      .setting progress::-webkit-progress-bar { background: var(--border); }
+      .setting progress::-webkit-progress-value { background: var(--accent); }
+      .nav.has-update::after { content: ''; margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
       .setting input.range { width: 220px; min-height: 0; padding: 0; border: 0; background: transparent; accent-color: var(--accent); }
       .setting > .secret { position: relative; display: block; flex: 0 0 300px; }
       .combo { position: relative; flex: 0 0 300px; }
@@ -282,6 +286,8 @@
             <h2>Gravação</h2>
             <div class="group">
               <div class="setting"><span>Atalho para gravar e parar<small id="shortcut-hint">Funciona com qualquer janela em foco</small></span><kbd id="shortcut-setting">indisponível</kbd><button type="button" id="change-shortcut" class="test-btn">Alterar</button></div>
+              <div class="setting"><span>Microfone<small id="mic-hint">Escolha o mesmo microfone que você usa na reunião</small></span><select id="mic-device" aria-label="Microfone"></select></div>
+              <div id="output-row" class="setting" hidden><span>Som do PC<small id="output-hint"></small></span><button type="button" id="open-sound-settings" class="test-btn">Abrir som do Windows</button></div>
             </div>
           </section>
           <section>
@@ -306,7 +312,8 @@
           <section>
             <h2>Sobre</h2>
             <div class="group">
-              <div class="setting"><span>Versão instalada<small id="update-result" role="status">As novas versões são baixadas sozinhas pelo instalador</small></span><span id="app-version" class="version"></span><button type="button" id="check-update" class="test-btn">Procurar atualização</button><button type="button" id="update-install" class="test-btn" hidden>Reiniciar e atualizar</button></div>
+              <div class="setting"><span>Versão instalada<small id="update-result" role="status">O app avisa quando sair uma versão nova, e você escolhe quando baixar</small></span><span id="app-version" class="version"></span><button type="button" id="check-update" class="test-btn">Procurar atualização</button><button type="button" id="update-download" class="test-btn" hidden>Baixar</button><button type="button" id="update-install" class="test-btn" hidden>Reiniciar e atualizar</button></div>
+              <div id="update-progress-row" class="setting" hidden><span>Baixando a versão <span id="update-progress-version"></span><small id="update-progress-text"></small></span><progress id="update-progress" max="1" value="0" aria-label="Progresso do download"></progress><button type="button" id="update-cancel" class="test-btn">Cancelar</button></div>
             </div>
           </section>
           <p class="hint">As chaves ficam criptografadas pelo sistema. As mudanças são salvas sozinhas.</p>

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { STEPS, acceleratorFromKey, parseSummary, parseTranscript, stepStates, summaryPreview, shortcutLabel, toggleTask } from '../src/notes.js'
+import { STEPS, acceleratorFromKey, downloadProgressText, parseSummary, parseTranscript, stepStates, summaryPreview, shortcutLabel, toggleTask } from '../src/notes.js'
 
 const SUMMARY = `# Planejamento da sprint 42
 
@@ -64,4 +64,9 @@ test('a pressed key combination becomes a global shortcut', () => {
 test('shortcuts are labelled the way each system shows them', () => {
   assert.equal(shortcutLabel('CommandOrControl+Alt+R', 'win32'), 'Ctrl+Alt+R')
   assert.equal(shortcutLabel('CommandOrControl+Alt+R', 'darwin'), '⌘⌥R')
+})
+
+test('the update progress says how much was downloaded, how much is left and how fast', () => {
+  assert.equal(downloadProgressText({ transferred: 12_300_000, total: 85_000_000, bytesPerSecond: 2_000_000 }), '12,3 MB de 85,0 MB · faltam 72,7 MB · 2,0 MB/s · ~37 s')
+  assert.equal(downloadProgressText({ transferred: 0, total: 85_000_000, bytesPerSecond: 0 }), '0,0 MB de 85,0 MB · faltam 85,0 MB')
 })
