@@ -12,9 +12,15 @@ $('wave').append(...bars)
 const VIEWS = {
   recording(current) {
     show('chips', 'badge', 'wave', 'timer', 'stop')
-    $('chip-sources').textContent = current.sources
-    $('chip-llm').textContent = `Resumo: ${current.llm}`
-    setText(`Gravando ${current.sources.toLowerCase()}`, true)
+    $('chip-llm').textContent = `Resumo by ${current.llm}`
+    const label = current.micMuted ? 'Desmutar microfone' : 'Mutar microfone'
+    $('mic').setAttribute('aria-pressed', String(current.micMuted))
+    $('mic').setAttribute('aria-label', label)
+    $('mic').title = label
+    // SVG elements have no `hidden` property, only the attribute.
+    $('mic-on').toggleAttribute('hidden', current.micMuted)
+    $('mic-off').toggleAttribute('hidden', !current.micMuted)
+    $('speaker').toggleAttribute('hidden', !current.systemAudio)
     const tick = () => ($('timer').textContent = new Date(Date.now() - current.startedAt).toISOString().slice(11, 19))
     tick()
     clock = setInterval(tick, 1000)
@@ -24,11 +30,6 @@ const VIEWS = {
 
 function show(...parts) {
   for (const part of PARTS) $(part).hidden = !parts.includes(part)
-}
-
-function setText(text, muted = false) {
-  $('text').textContent = text
-  $('text').classList.toggle('muted', muted)
 }
 
 function render(next) {
@@ -45,7 +46,7 @@ overlay.onLevel((level) => {
 })
 
 $('stop').onclick = () => overlay.stop()
-$('chip-sources').onclick = () => overlay.openSettings()
+$('mic').onclick = () => overlay.toggleMic()
 $('chip-llm').onclick = () => overlay.openSettings()
 
 render(await overlay.getState())

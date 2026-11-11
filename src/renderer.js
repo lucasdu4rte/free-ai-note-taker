@@ -4,7 +4,6 @@ import { STEPS, acceleratorFromKey, parseSummary, parseTranscript, stepStates } 
 const { api } = window
 const $ = (selector) => document.querySelector(selector)
 const PRESETS = { transcription: TRANSCRIPTION_PRESETS, llm: LLM_PRESETS }
-const CONFIG_FROM_PRESET = { transcription: (provider) => fromPreset(TRANSCRIPTION_PRESETS, provider), llm: llmFromPreset }
 const SAVE_DELAY_MS = 400
 const SAVED_BADGE_MS = 2500
 const STEP_LABELS = { transcribe: 'Transcrição', clean: 'Revisão do texto', summarize: 'Resumo' }
@@ -26,10 +25,15 @@ let summaryText
 let transcriptText
 let tab = 'summary'
 let recording
+let starting
+let pendingStart
 let toggling = false
 let saveTimer
 let saveStateTimer
 let notice
+let llmProfiles = {}
+let comboCount = 0
+const comboRenderers = new WeakMap()
 
 const captureSystemAudio = api.platform === 'win32'
 const SHORT_RECORDING_NOTICE_MS = 4000
@@ -51,16 +55,26 @@ function el(tag, props = {}, ...children) {
   return node
 }
 
-async function startRecording() {
+class StartCancelled extends Error {}
+
+async function startRecording(attempt) {
+  // Opening the audio device blocks this thread, so let the "Iniciando" state paint first.
+  await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)))
+  const throwIfCancelled = () => {
+    if (attempt.cancelled) throw new StartCancelled()
+  }
   const context = new AudioContext({ sampleRate: 16000 })
   const streams = []
   try {
     await context.audioWorklet.addModule('recorder-worklet.js')
+    throwIfCancelled()
     streams.push(await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }))
+    throwIfCancelled()
     if (captureSystemAudio) {
       const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
       screen.getVideoTracks().forEach((track) => track.stop())
       streams.push(screen)
+      throwIfCancelled()
     }
   } catch (error) {
     releaseAudio(context, streams)
@@ -71,6 +85,12 @@ async function startRecording() {
   for (const stream of streams) context.createMediaStreamSource(stream).connect(recorder)
   recorder.connect(context.destination)
   const id = await api.startRecording()
+  if (attempt.cancelled) {
+    await releaseAudio(context, streams)
+    // No audio reached the file yet, so the main process discards this meeting as too short.
+    await api.stopRecording()
+    throw new StartCancelled()
+  }
   // The worklet sends audio chunks every 250 ms and, in between, a level number every 50 ms for the overlay.
   recorder.port.onmessage = ({ data }) => (typeof data === 'number' ? api.sendLevel(data) : api.sendAudio(data))
   return { id, context, streams }
@@ -82,22 +102,47 @@ function releaseAudio(context, streams) {
 }
 
 async function toggleRecording() {
+  if (starting) return cancelStarting()
   if (toggling) return
+  if (!recording) return startWithFeedback()
   toggling = true
   $('#record').classList.add('loading')
   $('#record').disabled = true
-  $('#record-label').textContent = recording ? 'Salvando…' : 'Iniciando…'
+  $('#record-label').textContent = 'Salvando…'
   try {
-    if (recording) await stopRecording()
-    else recording = await startRecording()
+    await stopRecording()
   } catch (error) {
-    alert(`Não foi possível gravar: ${error.message}`)
+    alert(`Não foi possível salvar a gravação: ${error.message}`)
   } finally {
     toggling = false
     $('#record').classList.remove('loading')
     $('#record').disabled = false
     renderRecordState()
   }
+}
+
+async function startWithFeedback() {
+  const attempt = { cancelled: false }
+  starting = attempt
+  renderRecordState()
+  try {
+    // A cancelled start may still be talking to the main process; a new one must not overlap it.
+    await pendingStart?.catch(() => {})
+    if (attempt.cancelled) return
+    pendingStart = startRecording(attempt)
+    recording = await pendingStart
+  } catch (error) {
+    if (!(error instanceof StartCancelled)) alert(`Não foi possível gravar: ${error.message}`)
+  } finally {
+    if (starting === attempt) starting = undefined
+    renderRecordState()
+  }
+}
+
+function cancelStarting() {
+  starting.cancelled = true
+  starting = undefined
+  renderRecordState()
 }
 
 async function stopRecording() {
@@ -145,6 +190,7 @@ function setRun(id, run) {
 }
 
 function appState() {
+  if (starting) return { label: 'Iniciando a gravação…', dot: 'busy' }
   if (recording) return { label: 'Gravando', dot: 'rec' }
   if ([...runs.keys()].some(isProcessing)) return { label: 'Processando', dot: 'busy' }
   if (notice) return { label: notice, dot: 'warn' }
@@ -154,11 +200,19 @@ function appState() {
 function renderRecordState() {
   const state = appState()
   $('#record').classList.toggle('on', Boolean(recording))
-  $('#record-label').textContent = recording ? 'Parar' : 'Gravar'
+  $('#record').classList.toggle('loading', Boolean(starting) || toggling)
+  $('#record').title = starting ? 'Clique para cancelar' : ''
+  $('#record-label').textContent = recordLabel()
   $('#state').textContent = state.label
   $('#state-dot').className = `dot ${state.dot}`
   $('#update-install').disabled = state.dot !== 'ok'
   $('#update-install').title = state.dot === 'ok' ? '' : 'Espere a gravação e o processamento terminarem'
+}
+
+function recordLabel() {
+  if (starting) return 'Cancelar'
+  if (recording) return 'Parar'
+  return 'Gravar'
 }
 
 function formatWhen(id) {
@@ -205,7 +259,11 @@ function renderList() {
     ...visible.map((meeting) => {
       const row = el(
         'button',
-        { className: meeting.id === selectedId ? 'row on' : 'row', onclick: () => showMeeting(meeting.id) },
+        {
+          className: meeting.id === selectedId ? 'row on' : 'row',
+          onclick: () => showMeeting(meeting.id),
+          oncontextmenu: () => api.meetingMenu(meeting.id, !isProcessing(meeting.id)),
+        },
         el('span', { className: dotClass(meeting), ariaHidden: 'true' }),
         el(
           'span',
@@ -364,9 +422,194 @@ function llmGroup(config, index) {
   const group = $('#llm-template').content.firstElementChild.cloneNode(true)
   nameLlmGroup(group, index)
   group.querySelector('[data-action=remove]').hidden = !index
-  group.querySelector('[name=provider]').append(...providerOptions(LLM_PRESETS))
-  writeConfig(group, config)
+  const select = group.querySelector('[name=provider]')
+  select.append(...providerOptions(LLM_PRESETS))
+  select.before(providerCombobox(select))
+  writeLlmConfig(group, config)
   return group
+}
+
+function writeLlmConfig(group, config) {
+  writeConfig(group, config)
+  group.dataset.provider = config.provider
+  renderConfiguredProviders(group)
+  loadOllamaModels(group)
+}
+
+function switchLlmProvider(group, provider) {
+  llmProfiles[group.dataset.provider] = { ...readConfig(group), provider: group.dataset.provider }
+  writeLlmConfig(group, llmProfiles[provider] ?? llmFromPreset(provider))
+}
+
+const isConfigured = (config) => Boolean(config?.apiKey) || (config?.provider === 'ollama' && Boolean(config.model))
+
+function renderConfiguredProviders(group) {
+  const select = group.querySelector('[name=provider]')
+  for (const option of select.options) option.dataset.configured = isConfigured(llmProfiles[option.value])
+  comboRenderers.get(select)()
+}
+
+const CHEVRON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg>'
+
+const configuredBadge = (option) => (option.dataset.configured === 'true' ? el('span', { className: 'combo-badge', textContent: 'configurado' }) : undefined)
+
+// Stands in for the hidden <select>, which keeps the value: picking an option sets it and fires the same input event.
+function providerCombobox(select) {
+  const listId = `providers-${++comboCount}`
+  const trigger = el('button', { type: 'button', className: 'combo-trigger' })
+  trigger.setAttribute('aria-haspopup', 'listbox')
+  trigger.setAttribute('aria-expanded', 'false')
+  const search = el('input', { className: 'combo-search', placeholder: 'Buscar provider…', autocomplete: 'off', spellcheck: false })
+  search.setAttribute('role', 'combobox')
+  search.setAttribute('aria-label', 'Buscar provider')
+  search.setAttribute('aria-controls', listId)
+  search.setAttribute('aria-expanded', 'true')
+  search.setAttribute('aria-autocomplete', 'list')
+  const list = el('ul', { id: listId, className: 'combo-list', role: 'listbox' })
+  list.setAttribute('aria-label', 'Providers')
+  const popup = el('div', { className: 'combo-popup', hidden: true }, search, list)
+  const combo = el('div', { className: 'combo' }, trigger, popup)
+  let active = 0
+
+  const matches = () => [...select.options].filter((option) => option.text.toLowerCase().includes(search.value.trim().toLowerCase()))
+  const optionId = (option) => `${listId}-${option.value}`
+
+  function renderTrigger() {
+    const option = select.selectedOptions[0]
+    if (!option) return
+    const badge = configuredBadge(option)
+    trigger.replaceChildren(...[el('span', { className: 'combo-name', textContent: option.text }), badge].filter(Boolean))
+    trigger.insertAdjacentHTML('beforeend', CHEVRON)
+    trigger.lastElementChild.classList.add('combo-chevron')
+    trigger.setAttribute('aria-label', `Provider: ${option.text}${badge ? ', configurado' : ''}`)
+  }
+
+  function renderList() {
+    const options = matches()
+    active = Math.max(0, Math.min(active, options.length - 1))
+    list.replaceChildren(
+      ...options.map((option, index) => {
+        const item = el(
+          'li',
+          { id: optionId(option), className: index === active ? 'combo-option active' : 'combo-option', role: 'option' },
+          el('span', { className: 'combo-check', textContent: '✓', ariaHidden: 'true' }),
+          el('span', { className: 'combo-name', textContent: option.text }),
+          configuredBadge(option),
+        )
+        item.setAttribute('aria-selected', String(option.value === select.value))
+        item.onmousedown = (event) => event.preventDefault()
+        item.onmousemove = () => {
+          if (active === index) return
+          active = index
+          renderList()
+        }
+        item.onclick = () => choose(option.value)
+        return item
+      }),
+    )
+    if (!options.length) list.append(el('li', { className: 'combo-empty', textContent: 'Nenhum provider encontrado' }))
+    search.setAttribute('aria-activedescendant', options[active] ? optionId(options[active]) : '')
+    list.querySelector('.active')?.scrollIntoView({ block: 'nearest' })
+  }
+
+  function open() {
+    popup.hidden = false
+    trigger.setAttribute('aria-expanded', 'true')
+    search.value = ''
+    active = [...select.options].findIndex((option) => option.value === select.value)
+    renderList()
+    search.focus()
+  }
+
+  function close({ focusTrigger = true } = {}) {
+    if (popup.hidden) return
+    popup.hidden = true
+    trigger.setAttribute('aria-expanded', 'false')
+    if (focusTrigger) trigger.focus()
+  }
+
+  function choose(value) {
+    close()
+    if (value === select.value) return
+    select.value = value
+    select.dispatchEvent(new Event('input', { bubbles: true }))
+    renderTrigger()
+  }
+
+  const moveActive = (step) => {
+    active += step
+    renderList()
+  }
+  const SEARCH_KEYS = {
+    ArrowDown: () => moveActive(1),
+    ArrowUp: () => moveActive(-1),
+    Home: () => moveActive(-active),
+    End: () => moveActive(Infinity),
+    Enter: () => matches()[active] && choose(matches()[active].value),
+    Escape: () => close(),
+  }
+
+  trigger.onclick = () => (popup.hidden ? open() : close())
+  trigger.onkeydown = (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    event.preventDefault()
+    open()
+  }
+  search.oninput = (event) => {
+    event.stopPropagation()
+    active = 0
+    renderList()
+  }
+  search.onkeydown = (event) => {
+    if (event.key === 'Tab') return close({ focusTrigger: false })
+    if (!SEARCH_KEYS[event.key]) return
+    event.preventDefault()
+    SEARCH_KEYS[event.key]()
+  }
+  combo.addEventListener('focusout', (event) => {
+    if (!combo.contains(event.relatedTarget)) close({ focusTrigger: false })
+  })
+
+  comboRenderers.set(select, renderTrigger)
+  return combo
+}
+
+async function loadOllamaModels(group) {
+  const hint = group.querySelector('.model-hint')
+  const picker = group.querySelector('.model-picker')
+  const input = group.querySelector('[name=model]')
+  const { provider, baseURL } = readConfig(group)
+  hint.hidden = provider !== 'ollama'
+  picker.hidden = true
+  input.hidden = false
+  if (provider !== 'ollama') return
+  hint.textContent = 'Procurando os modelos do Ollama…'
+  let names
+  try {
+    names = await api.listModels(baseURL)
+  } catch {
+    names = undefined
+  }
+  const current = readConfig(group)
+  if (current.provider !== 'ollama' || current.baseURL !== baseURL) return
+  if (!names) {
+    hint.textContent = `O Ollama não respondeu em ${baseURL}`
+    return
+  }
+  if (!names.length) {
+    hint.textContent = 'Nenhum modelo instalado no Ollama (rode "ollama pull")'
+    return
+  }
+  hint.textContent = names.length === 1 ? '1 modelo instalado no Ollama' : `${names.length} modelos instalados no Ollama`
+  picker.replaceChildren(...names.map((name) => new Option(name)))
+  picker.hidden = false
+  input.hidden = true
+  if (names.includes(current.model)) {
+    picker.value = current.model
+    return
+  }
+  input.value = names[0]
+  saveSoon()
 }
 
 function nameLlmGroup(group, index) {
@@ -390,7 +633,8 @@ transcriptionGroup.querySelector('[name=provider]').append(...providerOptions(TR
 form.addEventListener('submit', (event) => event.preventDefault())
 async function saveForm() {
   const [llm, ...llmFallbacks] = llmGroups().map(readConfig)
-  const settings = { transcription: readConfig(transcriptionGroup), llm, llmFallbacks }
+  for (const config of [llm, ...llmFallbacks]) llmProfiles[config.provider] = config
+  const settings = { transcription: readConfig(transcriptionGroup), llm, llmFallbacks, llmProfiles }
   try {
     await api.saveSettings(settings)
   } catch (error) {
@@ -398,6 +642,7 @@ async function saveForm() {
     return
   }
   renderProviderLabels(settings)
+  llmGroups().forEach(renderConfiguredProviders)
   showSaveState('Salvo')
 }
 
@@ -478,9 +723,19 @@ api.onTestStatus((section, status) => {
 form.addEventListener('input', (event) => {
   const group = event.target.closest('[data-section]')
   if (!group) return
-  if (event.target.name === 'provider') writeConfig(group, CONFIG_FROM_PRESET[group.dataset.section](event.target.value))
+  if (event.target.name === 'provider' && group.dataset.section === 'llm') switchLlmProvider(group, event.target.value)
+  else if (event.target.name === 'provider') writeConfig(group, fromPreset(TRANSCRIPTION_PRESETS, event.target.value))
   showTestResult(group)
   saveSoon()
+})
+
+form.addEventListener('change', (event) => {
+  if (event.target.classList.contains('model-picker')) {
+    event.target.closest('[data-section]').querySelector('[name=model]').value = event.target.value
+    saveSoon()
+    return
+  }
+  if (event.target.name === 'baseURL' && event.target.closest('[data-section=llm]')) loadOllamaModels(event.target.closest('[data-section=llm]'))
 })
 
 $('#add-llm').onclick = () => {
@@ -516,6 +771,12 @@ $('#title').onblur = async () => {
   await refreshList()
   $('#title').textContent = titleOf(selectedMeeting())
 }
+api.onMeetingMenuAction(async (id, action) => {
+  await showMeeting(id)
+  if (action === 'delete') return $('#delete').click()
+  $('#title').focus()
+  getSelection().selectAllChildren($('#title'))
+})
 $('#open-folder').onclick = () => api.openMeeting(selectedId)
 $('#copy').onclick = async () => {
   await navigator.clipboard.writeText(tab === 'summary' ? summaryText : transcriptText)
@@ -588,9 +849,12 @@ document.querySelectorAll('[data-copy]').forEach((button) => {
 
 api.onMeetingProgress((id, step, detail) => setRun(id, { step, detail }))
 api.onToggleRecording(toggleRecording)
+// Only the mic track is disabled, so the PC audio keeps being recorded while the mic is muted.
+api.onMicMuted((muted) => recording?.streams[0].getAudioTracks().forEach((track) => (track.enabled = !muted)))
 api.onShowSettings(() => showView('settings'))
 
 const settings = await api.getSettings()
+llmProfiles = settings.llmProfiles
 writeConfig(transcriptionGroup, settings.transcription)
 renderLlmGroups([settings.llm, ...settings.llmFallbacks])
 renderProviderLabels(settings)

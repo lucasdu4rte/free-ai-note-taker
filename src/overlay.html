@@ -19,12 +19,14 @@
       .badge { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #ff5a52; border: 2px solid #0c0c0d; animation: pulse 1.4s ease-in-out infinite; }
       .wave { display: flex; align-items: center; gap: 2px; height: 24px; }
       .wave span { display: block; width: 3px; height: 3px; border-radius: 2px; background: #f2f2f2; transition: height 50ms linear; }
-      .text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-      .text span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .muted { color: #a3a3a8; }
+      .sources { flex-grow: 1; display: flex; align-items: center; gap: 12px; color: #a3a3a8; }
+      .mic { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid #2c2c30; border-radius: 10px; background: #1a1a1c; color: #f2f2f2; }
+      .mic:hover { background: #242427; }
+      .mic[aria-pressed="true"] { background: #3a1716; border-color: #ff5a52; color: #ff5a52; }
       .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
       .action { min-height: 34px; padding: 0 14px; border: 0; border-radius: 10px; background: #f2f2f2; color: #0c0c0d; font-weight: 600; }
-      .action.stop { background: #ff5a52; }
+      .action.stop { display: flex; align-items: center; gap: 8px; }
+      .stop-icon { width: 8px; height: 8px; border-radius: 2px; background: currentColor; }
       @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
       @media (prefers-reduced-motion: reduce) { .badge { animation: none; } .wave span { transition: none; } }
     </style>
@@ -32,7 +34,6 @@
   <body>
     <div class="wrap">
       <div id="chips" class="chips" hidden>
-        <button id="chip-sources" class="chip" title="Abrir as configurações"></button>
         <button id="chip-llm" class="chip" title="Abrir as configurações"></button>
       </div>
       <div class="bar" role="group" aria-label="Gravação da reunião">
@@ -41,11 +42,15 @@
           <span id="badge" class="badge" hidden></span>
         </span>
         <span id="wave" class="wave" aria-hidden="true" hidden></span>
-        <div class="text">
-          <span id="text" role="status"></span>
+        <div class="sources">
+          <button id="mic" class="mic" aria-pressed="false" aria-label="Mutar microfone" title="Mutar microfone">
+            <svg id="mic-on" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
+            <svg id="mic-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" hidden><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><path d="M3 3l18 18"></path></svg>
+          </button>
+          <svg id="speaker" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Som do PC sendo gravado" hidden><title>Som do PC sendo gravado</title><path d="M11 5 6 9H2v6h4l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M19 5a10 10 0 0 1 0 14"></path></svg>
         </div>
         <span id="timer" class="timer" role="timer" aria-label="Tempo de gravação" hidden></span>
-        <button id="stop" class="action stop" hidden>Parar</button>
+        <button id="stop" class="action stop" hidden><span class="stop-icon" aria-hidden="true"></span>Parar</button>
       </div>
     </div>
     <script type="module" src="overlay.js"></script>

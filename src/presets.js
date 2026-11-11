@@ -36,9 +36,16 @@ export const DEFAULT_SETTINGS = {
   transcription: fromPreset(TRANSCRIPTION_PRESETS, 'local'),
   llm: llmFromPreset('gemini'),
   llmFallbacks: [],
+  llmProfiles: {},
 }
 
 // Settings saved before reserves existed have neither reserves nor a time limit.
+// llmProfiles keeps the last config of every AI provider, so switching away and back loses nothing.
 export function withSettingsDefaults(saved) {
-  return { ...saved, llm: withTimeout(saved.llm), llmFallbacks: (saved.llmFallbacks ?? []).map(withTimeout) }
+  const llm = withTimeout(saved.llm)
+  const llmFallbacks = (saved.llmFallbacks ?? []).map(withTimeout)
+  const llmProfiles = Object.fromEntries(Object.entries(saved.llmProfiles ?? {}).map(([provider, config]) => [provider, withTimeout(config)]))
+  // Copies, not the same objects: saving encrypts each config's key once, and a shared object would be encrypted twice.
+  for (const config of [llm, ...llmFallbacks]) llmProfiles[config.provider] = { ...config }
+  return { ...saved, llm, llmFallbacks, llmProfiles }
 }

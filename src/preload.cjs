@@ -23,15 +23,19 @@ contextBridge.exposeInMainWorld('api', {
   readMeeting: (id) => ipcRenderer.invoke('meeting:read', id),
   toggleTask: (id, index, done) => ipcRenderer.invoke('meeting:toggle-task', id, index, done),
   renameMeeting: (id, title) => ipcRenderer.invoke('meeting:rename', id, title),
+  meetingMenu: (id, canDelete) => ipcRenderer.send('meeting:menu', id, canDelete),
+  onMeetingMenuAction: on('meeting:menu-action'),
   openMeeting: (id) => ipcRenderer.invoke('meeting:open', id),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   testSettings: (section, config) => ipcRenderer.invoke('settings:test', section, config),
+  listModels: (baseURL) => ipcRenderer.invoke('llm:models', baseURL),
   onTestStatus: on('settings:test-status'),
   onUpdateReady: on('update:ready'),
   installUpdate: () => ipcRenderer.send('update:install'),
   onMeetingProgress: on('meeting:progress'),
   onToggleRecording: on('recording:toggle'),
+  onMicMuted: on('recording:mic-muted'),
   onShowSettings: on('settings:show'),
 
   overlay: {
@@ -39,6 +43,7 @@ contextBridge.exposeInMainWorld('api', {
     onState: on('overlay:state'),
     onLevel: on('overlay:level'),
     stop: () => ipcRenderer.send('overlay:stop'),
+    toggleMic: () => ipcRenderer.send('overlay:toggle-mic'),
     openSettings: () => ipcRenderer.send('overlay:open-settings'),
   },
 })

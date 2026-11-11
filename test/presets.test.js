@@ -26,3 +26,16 @@ test('a time limit and reserves the user chose are kept', () => {
   assert.equal(settings.llm.timeoutSeconds, '0')
   assert.deepEqual(settings.llmFallbacks, [{ timeoutSeconds: '30', provider: 'groq' }])
 })
+
+test('each provider keeps its last config, and the providers in use win over older ones', () => {
+  const settings = withSettingsDefaults({
+    transcription: {},
+    llm: { provider: 'gemini', apiKey: 'new' },
+    llmProfiles: { gemini: { provider: 'gemini', apiKey: 'old' }, anthropic: { provider: 'anthropic', apiKey: 'a' } },
+  })
+
+  assert.equal(settings.llmProfiles.gemini.apiKey, 'new')
+  assert.notEqual(settings.llmProfiles.gemini, settings.llm)
+  assert.equal(settings.llmProfiles.anthropic.apiKey, 'a')
+  assert.equal(settings.llmProfiles.anthropic.timeoutSeconds, '30')
+})

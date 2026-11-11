@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, nativeTheme, net, safeStorage, screen, session, shell, utilityProcess } from 'electron'
+import { app, BrowserWindow, Menu, desktopCapturer, globalShortcut, ipcMain, nativeTheme, net, safeStorage, screen, session, shell, utilityProcess } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -19,6 +19,7 @@ const DEFAULT_SHORTCUT = 'CommandOrControl+Alt+R'
 const OVERLAY_SIZE = { width: 640, height: 112, bottomMargin: 24 }
 const MAX_TITLE_LENGTH = 120
 const MIN_RECORDING_SECONDS = 3
+const MODELS_TIMEOUT_MS = 3000
 const THEMES = ['system', 'light', 'dark']
 
 const notesDir = () => path.join(app.getPath('documents'), 'Free AI Note Taker')
@@ -50,7 +51,7 @@ function meetingInfo(id) {
   }
 }
 
-const configsWithKeys = (settings) => [settings.transcription, settings.llm, ...settings.llmFallbacks]
+const configsWithKeys = (settings) => [settings.transcription, settings.llm, ...settings.llmFallbacks, ...Object.values(settings.llmProfiles)]
 
 async function loadSettings() {
   const saved = JSON.parse(readIfExists(settingsFile()) ?? 'null')
@@ -126,10 +127,12 @@ ipcMain.handle('recording:start', async () => {
   fs.writeSync(fd, wavHeader(0))
   recording = { id, fd }
   const { llm } = await loadSettings()
+  const systemAudio = process.platform === 'win32'
   showOverlay({
     phase: 'recording',
     startedAt: Date.now(),
-    sources: process.platform === 'win32' ? 'Microfone + som do PC' : 'Microfone',
+    systemAudio,
+    micMuted: false,
     llm: LLM_PRESETS[llm.provider]?.label.split(' (')[0] ?? llm.model,
   })
   return id
@@ -189,6 +192,14 @@ function readMeetingText(id) {
 
 ipcMain.handle('meetings:list', listMeetings)
 
+ipcMain.on('meeting:menu', (event, id, canDelete) => {
+  const choose = (action) => () => event.sender.send('meeting:menu-action', id, action)
+  Menu.buildFromTemplate([
+    { label: 'Renomear', click: choose('rename') },
+    { label: 'Excluir', enabled: canDelete, click: choose('delete') },
+  ]).popup({ window: BrowserWindow.fromWebContents(event.sender) })
+})
+
 ipcMain.handle('meeting:read', (_event, id) => {
   const audio = path.join(meetingDir(id), FILES.audio)
   return {
@@ -220,6 +231,12 @@ ipcMain.handle('meeting:open', (_event, id) => shell.openPath(meetingDir(id)))
 ipcMain.handle('settings:get', loadSettings)
 ipcMain.handle('app:version', () => app.getVersion())
 ipcMain.handle('settings:save', (_event, settings) => saveSettings(settings))
+ipcMain.handle('llm:models', async (_event, baseURL) => {
+  const response = await fetch(`${baseURL.replace(/\/+$/, '')}/models`, { signal: AbortSignal.timeout(MODELS_TIMEOUT_MS) })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const { data } = await response.json()
+  return data.map((model) => model.id).sort()
+})
 ipcMain.handle('settings:test', (event, section, config) => {
   if (section === 'llm') return testLlm(config)
   return testTranscription(config, modelsDir(), (status) => event.sender.send('settings:test-status', section, status), transcribeInWorker)
@@ -227,6 +244,12 @@ ipcMain.handle('settings:test', (event, section, config) => {
 
 ipcMain.handle('overlay:get-state', () => overlayState)
 ipcMain.on('overlay:stop', () => win.webContents.send('recording:toggle'))
+ipcMain.on('overlay:toggle-mic', () => {
+  if (overlayState.phase !== 'recording') return
+  const micMuted = !overlayState.micMuted
+  win.webContents.send('recording:mic-muted', micMuted)
+  showOverlay({ ...overlayState, micMuted })
+})
 ipcMain.on('overlay:open-settings', () => focusMainWindow('settings:show'))
 
 // Updates come from this repo's GitHub Releases (latest.yml). A downloaded update installs when the app quits,
@@ -269,7 +292,8 @@ app.whenReady().then(() => {
   nativeTheme.themeSource = readIfExists(themeFile())?.trim() || 'system'
   // Teams/Meet/Zoom audio comes out of the speakers: Windows lets us record it as a WASAPI loopback, no driver needed.
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
-    const [source] = await desktopCapturer.getSources({ types: ['screen'] })
+    // A zero thumbnail skips grabbing a full-screen image, which stalled the app on Windows when Gravar was clicked.
+    const [source] = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } })
     callback({ video: source, audio: 'loopback' })
   })
 
