@@ -33,7 +33,7 @@ let saveStateTimer
 let notice
 let llmProfiles = {}
 let comboCount = 0
-const comboRenderers = new WeakMap()
+const combos = new WeakMap()
 
 const captureSystemAudio = api.platform === 'win32'
 const SHORT_RECORDING_NOTICE_MS = 4000
@@ -405,6 +405,7 @@ function showView(view) {
 
 function writeConfig(group, config) {
   for (const input of group.querySelectorAll('[name]')) input.value = config[input.name] ?? ''
+  group.querySelectorAll('select').forEach(syncCombobox)
   group.querySelectorAll('.cloud').forEach((row) => (row.hidden = config.provider === 'local'))
 }
 
@@ -424,7 +425,7 @@ function llmGroup(config, index) {
   group.querySelector('[data-action=remove]').hidden = !index
   const select = group.querySelector('[name=provider]')
   select.append(...providerOptions(LLM_PRESETS))
-  select.before(providerCombobox(select))
+  upgradeSelects(group)
   writeLlmConfig(group, config)
   return group
 }
@@ -446,33 +447,50 @@ const isConfigured = (config) => Boolean(config?.apiKey) || (config?.provider ==
 function renderConfiguredProviders(group) {
   const select = group.querySelector('[name=provider]')
   for (const option of select.options) option.dataset.configured = isConfigured(llmProfiles[option.value])
-  comboRenderers.get(select)()
+  syncCombobox(select)
+}
+
+const comboboxOf = (select) => combos.get(select)
+const syncCombobox = (select) => comboboxOf(select)?.render()
+const SEARCH_FROM_OPTIONS = 6
+const fieldLabel = (select) => select.getAttribute('aria-label') ?? select.closest('.setting')?.querySelector('span')?.firstChild?.textContent.trim() ?? ''
+
+function upgradeSelects(root) {
+  for (const select of root.querySelectorAll('select')) {
+    if (combos.has(select)) continue
+    select.hidden = true
+    select.before(combobox(select))
+  }
 }
 
 const CHEVRON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg>'
 
 const configuredBadge = (option) => (option.dataset.configured === 'true' ? el('span', { className: 'combo-badge', textContent: 'configurado' }) : undefined)
 
-// Stands in for the hidden <select>, which keeps the value: picking an option sets it and fires the same input event.
-function providerCombobox(select) {
-  const listId = `providers-${++comboCount}`
+// Stands in for a hidden <select>, which keeps the value: picking an option sets it and fires the same input and change events.
+// Lists long enough to scan get a search field; short ones take the keys on the list itself.
+function combobox(select) {
+  const label = fieldLabel(select)
+  const listId = `combo-${++comboCount}`
   const trigger = el('button', { type: 'button', className: 'combo-trigger' })
   trigger.setAttribute('aria-haspopup', 'listbox')
   trigger.setAttribute('aria-expanded', 'false')
-  const search = el('input', { className: 'combo-search', placeholder: 'Buscar provider…', autocomplete: 'off', spellcheck: false })
+  const search = el('input', { className: 'combo-search', placeholder: 'Buscar…', autocomplete: 'off', spellcheck: false })
   search.setAttribute('role', 'combobox')
-  search.setAttribute('aria-label', 'Buscar provider')
+  search.setAttribute('aria-label', `Buscar ${label.toLowerCase()}`)
   search.setAttribute('aria-controls', listId)
   search.setAttribute('aria-expanded', 'true')
   search.setAttribute('aria-autocomplete', 'list')
-  const list = el('ul', { id: listId, className: 'combo-list', role: 'listbox' })
-  list.setAttribute('aria-label', 'Providers')
+  const list = el('ul', { id: listId, className: 'combo-list', role: 'listbox', tabIndex: -1 })
+  list.setAttribute('aria-label', label)
   const popup = el('div', { className: 'combo-popup', hidden: true }, search, list)
   const combo = el('div', { className: 'combo' }, trigger, popup)
   let active = 0
 
+  const searchable = () => select.options.length >= SEARCH_FROM_OPTIONS
+  const keyTarget = () => (searchable() ? search : list)
   const matches = () => [...select.options].filter((option) => option.text.toLowerCase().includes(search.value.trim().toLowerCase()))
-  const optionId = (option) => `${listId}-${option.value}`
+  const optionId = (option) => `${listId}-${[...select.options].indexOf(option)}`
 
   function renderTrigger() {
     const option = select.selectedOptions[0]
@@ -481,7 +499,7 @@ function providerCombobox(select) {
     trigger.replaceChildren(...[el('span', { className: 'combo-name', textContent: option.text }), badge].filter(Boolean))
     trigger.insertAdjacentHTML('beforeend', CHEVRON)
     trigger.lastElementChild.classList.add('combo-chevron')
-    trigger.setAttribute('aria-label', `Provider: ${option.text}${badge ? ', configurado' : ''}`)
+    trigger.setAttribute('aria-label', `${label}: ${option.text}${badge ? ', configurado' : ''}`)
   }
 
   function renderList() {
@@ -507,8 +525,8 @@ function providerCombobox(select) {
         return item
       }),
     )
-    if (!options.length) list.append(el('li', { className: 'combo-empty', textContent: 'Nenhum provider encontrado' }))
-    search.setAttribute('aria-activedescendant', options[active] ? optionId(options[active]) : '')
+    if (!options.length) list.append(el('li', { className: 'combo-empty', textContent: 'Nada encontrado' }))
+    keyTarget().setAttribute('aria-activedescendant', options[active] ? optionId(options[active]) : '')
     list.querySelector('.active')?.scrollIntoView({ block: 'nearest' })
   }
 
@@ -516,9 +534,10 @@ function providerCombobox(select) {
     popup.hidden = false
     trigger.setAttribute('aria-expanded', 'true')
     search.value = ''
+    search.hidden = !searchable()
     active = [...select.options].findIndex((option) => option.value === select.value)
     renderList()
-    search.focus()
+    keyTarget().focus()
   }
 
   function close({ focusTrigger = true } = {}) {
@@ -533,6 +552,7 @@ function providerCombobox(select) {
     if (value === select.value) return
     select.value = value
     select.dispatchEvent(new Event('input', { bubbles: true }))
+    select.dispatchEvent(new Event('change', { bubbles: true }))
     renderTrigger()
   }
 
@@ -560,17 +580,20 @@ function providerCombobox(select) {
     active = 0
     renderList()
   }
-  search.onkeydown = (event) => {
+  const onListKey = (event) => {
     if (event.key === 'Tab') return close({ focusTrigger: false })
     if (!SEARCH_KEYS[event.key]) return
     event.preventDefault()
     SEARCH_KEYS[event.key]()
   }
+  search.onkeydown = onListKey
+  list.onkeydown = onListKey
   combo.addEventListener('focusout', (event) => {
     if (!combo.contains(event.relatedTarget)) close({ focusTrigger: false })
   })
 
-  comboRenderers.set(select, renderTrigger)
+  combos.set(select, { element: combo, render: renderTrigger })
+  renderTrigger()
   return combo
 }
 
@@ -580,7 +603,7 @@ async function loadOllamaModels(group) {
   const input = group.querySelector('[name=model]')
   const { provider, baseURL } = readConfig(group)
   hint.hidden = provider !== 'ollama'
-  picker.hidden = true
+  comboboxOf(picker).element.hidden = true
   input.hidden = false
   if (provider !== 'ollama') return
   hint.textContent = 'Procurando os modelos do Ollama…'
@@ -602,14 +625,12 @@ async function loadOllamaModels(group) {
   }
   hint.textContent = names.length === 1 ? '1 modelo instalado no Ollama' : `${names.length} modelos instalados no Ollama`
   picker.replaceChildren(...names.map((name) => new Option(name)))
-  picker.hidden = false
+  comboboxOf(picker).element.hidden = false
   input.hidden = true
-  if (names.includes(current.model)) {
-    picker.value = current.model
-    return
-  }
-  input.value = names[0]
-  saveSoon()
+  if (names.includes(current.model)) picker.value = current.model
+  else input.value = names[0]
+  syncCombobox(picker)
+  if (!names.includes(current.model)) saveSoon()
 }
 
 function nameLlmGroup(group, index) {
@@ -629,6 +650,7 @@ function renderProviderLabels(settings) {
 }
 
 transcriptionGroup.querySelector('[name=provider]').append(...providerOptions(TRANSCRIPTION_PRESETS))
+upgradeSelects(form)
 
 form.addEventListener('submit', (event) => event.preventDefault())
 async function saveForm() {
@@ -895,6 +917,7 @@ $('#change-shortcut').onclick = changeShortcut
 renderShortcut(await api.shortcut())
 $('#app-version').textContent = await api.version()
 $('#theme').value = await api.theme()
+syncCombobox($('#theme'))
 renderMcp(await api.mcpStatus())
 
 await refreshList()

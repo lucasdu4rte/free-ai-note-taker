@@ -263,7 +263,7 @@
           <section data-section="transcription">
             <h2>Transcrição</h2>
             <div class="group">
-              <label class="setting"><span>Provider</span><select name="provider"></select></label>
+              <div class="setting"><span>Provider</span><select name="provider"></select></div>
               <label class="setting cloud"><span>Chave de API</span><span class="secret"><input type="password" name="apiKey" autocomplete="off" spellcheck="false" /><button type="button" class="reveal" data-action="reveal" aria-label="Mostrar chave" aria-pressed="false" title="Mostrar chave"><svg class="eye" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg><svg class="eye-off" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.2 3.2"></path><path d="M6.6 6.6C3.9 8.3 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path><path d="m2 2 20 20"></path></svg></button></span></label>
               <label class="setting cloud"><span>Modelo</span><input name="model" /></label>
               <label class="setting cloud"><span>URL base</span><input name="baseURL" /></label>
@@ -286,7 +286,7 @@
           <section>
             <h2>Aparência</h2>
             <div class="group">
-              <label class="setting"><span>Tema</span><select id="theme"><option value="system">Automático (igual ao sistema)</option><option value="light">Claro</option><option value="dark">Escuro</option></select></label>
+              <div class="setting"><span>Tema</span><select id="theme"><option value="system">Automático (igual ao sistema)</option><option value="light">Claro</option><option value="dark">Escuro</option></select></div>
             </div>
           </section>
           <section>
@@ -312,11 +312,11 @@
         <template id="llm-template">
           <div class="group" role="group" data-section="llm">
             <div class="setting"><span class="llm-title"></span><button type="button" class="icon-btn" data-action="remove" aria-label="Remover reserva" title="Remover reserva"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
-            <div class="setting"><span>Provider</span><select name="provider" hidden></select></div>
+            <div class="setting"><span>Provider</span><select name="provider"></select></div>
             <label class="setting"><span>Chave de API<small>Não precisa para o Ollama</small></span><span class="secret"><input type="password" name="apiKey" autocomplete="off" spellcheck="false" /><button type="button" class="reveal" data-action="reveal" aria-label="Mostrar chave" aria-pressed="false" title="Mostrar chave"><svg class="eye" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg><svg class="eye-off" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.2 3.2"></path><path d="M6.6 6.6C3.9 8.3 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path><path d="m2 2 20 20"></path></svg></button></span></label>
-            <label class="setting"><span>Modelo<small class="model-hint" hidden></small></span><input name="model" /><select class="model-picker" aria-label="Modelo do Ollama" hidden></select></label>
+            <div class="setting"><span>Modelo<small class="model-hint" hidden></small></span><input name="model" aria-label="Modelo" /><select class="model-picker" aria-label="Modelo do Ollama"></select></div>
             <label class="setting"><span>URL base</span><input name="baseURL" /></label>
-            <label class="setting"><span>Tempo limite<small>Quanto esperar por cada resposta da IA</small></span><select name="timeoutSeconds"><option value="30">30 s</option><option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option><option value="0">Ilimitado</option></select></label>
+            <div class="setting"><span>Tempo limite<small>Quanto esperar por cada resposta da IA</small></span><select name="timeoutSeconds"><option value="30">30 s</option><option value="60">1 min</option><option value="120">2 min</option><option value="300">5 min</option><option value="0">Ilimitado</option></select></div>
             <div class="setting"><span>Testar<small class="test-result">Manda uma mensagem curta para a IA e espera a resposta</small></span><button type="button" class="test-btn" data-action="test">Testar</button></div>
           </div>
         </template>
