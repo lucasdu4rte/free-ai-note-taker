@@ -53,6 +53,7 @@ function meetingInfo(id) {
     preview: summaryPreview(summary),
     minutes: Math.max(1, Math.round(seconds / 60)),
     hasSummary: summary !== undefined,
+    locked: fs.existsSync(path.join(meetingDir(id), FILES.lock)),
   }
 }
 
@@ -183,9 +184,17 @@ ipcMain.handle('recording:stop', () => {
 
 // The Parakeet model and the meeting's audio take well over 1 GB of native memory that ONNX Runtime keeps after use.
 // Transcribing in a child process that is killed afterwards gives all of it back to the system.
-function transcribeInWorker(audioPath, config, modelsDir, onStatus) {
+function transcribeInWorker(audioPath, config, modelsDir, onStatus, signal) {
   return new Promise((resolve, reject) => {
     const child = utilityProcess.fork(path.join(import.meta.dirname, 'transcribe-worker.js'))
+    signal?.addEventListener(
+      'abort',
+      () => {
+        reject(signal.reason)
+        child.kill()
+      },
+      { once: true },
+    )
     child.on('message', ({ status, transcript, error }) => {
       if (status) return onStatus(status)
       child.kill()
@@ -197,12 +206,26 @@ function transcribeInWorker(audioPath, config, modelsDir, onStatus) {
   })
 }
 
+const processing = new Map()
+
 ipcMain.handle('meeting:process', async (event, id, from) => {
   // Processing the WAV still being written would cache a partial raw transcript for the real run after Parar.
   if (id === recording?.id) throw new Error('Pare a gravação antes de processar esta reunião.')
   const report = (step, detail) => event.sender.send('meeting:progress', id, step, detail)
-  await processMeeting(meetingDir(id), await loadSettings(), modelsDir(), report, from, transcribeInWorker)
+  const controller = new AbortController()
+  processing.set(id, controller)
+  try {
+    await processMeeting(meetingDir(id), await loadSettings(), modelsDir(), report, from, transcribeInWorker, controller.signal)
+    return { cancelled: false }
+  } catch (error) {
+    if (controller.signal.aborted) return { cancelled: true }
+    throw error
+  } finally {
+    if (processing.get(id) === controller) processing.delete(id)
+  }
 })
+
+ipcMain.on('meeting:cancel', (_event, id) => processing.get(id)?.abort())
 
 function listMeetings() {
   fs.mkdirSync(notesDir(), { recursive: true })
@@ -216,11 +239,12 @@ function readMeetingText(id) {
 
 ipcMain.handle('meetings:list', listMeetings)
 
-ipcMain.on('meeting:menu', (event, id, canDelete) => {
+ipcMain.on('meeting:menu', (event, id, canDelete, locked) => {
   const choose = (action) => () => event.sender.send('meeting:menu-action', id, action)
   Menu.buildFromTemplate([
     { label: 'Renomear', click: choose('rename') },
-    { label: 'Excluir', enabled: canDelete, click: choose('delete') },
+    { label: locked ? 'Desproteger' : 'Proteger contra exclusão', click: choose('toggle-lock') },
+    { label: 'Excluir', enabled: canDelete && !locked, click: choose('delete') },
   ]).popup({ window: BrowserWindow.fromWebContents(event.sender) })
 })
 
@@ -248,7 +272,15 @@ ipcMain.handle('meeting:rename', (_event, id, title) => {
 
 ipcMain.handle('meeting:delete', (_event, id) => {
   if (id === recording?.id) throw new Error('Pare a gravação antes de excluir esta reunião.')
+  if (fs.existsSync(path.join(meetingDir(id), FILES.lock))) throw new Error('Esta reunião está protegida. Desproteja antes de excluir.')
   return shell.trashItem(meetingDir(id))
+})
+
+ipcMain.handle('meeting:lock', (_event, id, locked) => {
+  if (typeof locked !== 'boolean') throw new Error('Valor inválido para proteger a reunião.')
+  const file = path.join(meetingDir(id), FILES.lock)
+  if (locked) fs.writeFileSync(file, 'Protegida contra exclusão no app.\n')
+  else fs.rmSync(file, { force: true })
 })
 
 ipcMain.handle('meeting:open', (_event, id) => shell.openPath(meetingDir(id)))
@@ -295,7 +327,14 @@ ipcMain.on('overlay:drag-start', () => {
     const dy = now.y - overlayDrag.cursor.y
     if (!overlayDrag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return
     overlayDrag.moved = true
-    overlay.setPosition(overlayDrag.x + dx, overlayDrag.y + dy)
+    // Windows display scaling gives fractional cursor points, and setPosition throws on anything but integers.
+    const { workArea } = screen.getDisplayNearestPoint(now)
+    const [width, height] = overlay.getSize()
+    const clamp = (value, min, max) => Math.round(Math.min(Math.max(value, min), max))
+    overlay.setPosition(
+      clamp(overlayDrag.x + dx, workArea.x, workArea.x + workArea.width - width),
+      clamp(overlayDrag.y + dy, workArea.y, workArea.y + workArea.height - height),
+    )
   }, DRAG_POLL_MS)
 })
 ipcMain.handle('overlay:drag-end', stopOverlayDrag)

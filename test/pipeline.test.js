@@ -155,6 +155,21 @@ test('a failed step can be retried on its own', async () => {
   server.close()
 })
 
+test('cancelling stops a hanging AI request at once and keeps the earlier steps', async () => {
+  const server = await fakeApi(() => {})
+  const dir = tmp()
+  fs.writeFileSync(path.join(dir, FILES.rawTranscript), '[00:01] bom dia')
+  const settings = { llm: { provider: 'custom', baseURL: server.url, model: 'm', timeoutSeconds: '0' }, llmFallbacks: [] }
+  const controller = new AbortController()
+
+  const run = processMeeting(dir, settings, MODELS_DIR, (step) => step === 'clean' && setTimeout(() => controller.abort(), 50), 'clean', undefined, controller.signal)
+
+  await assert.rejects(run, { name: 'AbortError' })
+  assert.deepEqual(completedSteps(dir), ['transcribe'])
+  server.closeAllConnections()
+  server.close()
+})
+
 test('an unknown step is rejected', async () => {
   let calls = 0
   const server = await fakeApi((_req, res) => {

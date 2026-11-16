@@ -213,10 +213,12 @@ function showNotice(text) {
 }
 
 async function processMeeting(id, from) {
+  cancelButtons.delete(id)
   setRun(id, { step: from })
   try {
-    await api.processMeeting(id, from)
+    const { cancelled } = await api.processMeeting(id, from)
     runs.delete(id)
+    if (cancelled) showNotice('Processamento cancelado. Continue quando quiser.')
   } catch (error) {
     runs.set(id, { step: runs.get(id).step, error: errorText(error) })
   }
@@ -309,13 +311,13 @@ function renderList() {
         {
           className: meeting.id === selectedId ? 'row on' : 'row',
           onclick: () => showMeeting(meeting.id),
-          oncontextmenu: () => api.meetingMenu(meeting.id, !isProcessing(meeting.id)),
+          oncontextmenu: () => api.meetingMenu(meeting.id, !isProcessing(meeting.id), meeting.locked),
         },
         el('span', { className: dotClass(meeting), ariaHidden: 'true' }),
         el(
           'span',
           { className: 'row-body' },
-          el('span', { className: 'row-title', textContent: titleOf(meeting) }),
+          el('span', { className: 'row-title', textContent: titleOf(meeting) }, meeting.locked ? lockIcon() : undefined),
           el('span', { className: 'row-meta', textContent: `${formatWhen(meeting.id)} · ${meeting.minutes} min` }),
           el('span', { className: 'row-preview', textContent: previewOf(meeting) }),
         ),
@@ -353,6 +355,31 @@ function renderPlayer(audioUrl) {
   if (player.getAttribute('src') !== audioUrl) player.src = audioUrl
 }
 
+const LOCK_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>'
+
+function lockIcon() {
+  const icon = el('span', { className: 'row-lock', role: 'img', ariaLabel: 'Protegida', title: 'Protegida contra exclusão' })
+  icon.innerHTML = LOCK_SVG
+  return icon
+}
+
+function renderLock() {
+  const locked = Boolean(selectedMeeting()?.locked)
+  const label = locked ? 'Desproteger (permite excluir)' : 'Proteger contra exclusão'
+  $('#lock').setAttribute('aria-pressed', String(locked))
+  $('#lock').setAttribute('aria-label', label)
+  $('#lock').title = label
+  $('#delete').title = locked ? 'Reunião protegida: desproteja para excluir' : 'Excluir reunião'
+}
+
+async function toggleLock(id) {
+  const meeting = meetings.find((m) => m.id === id)
+  if (!meeting) return
+  await api.lockMeeting(id, !meeting.locked)
+  await refreshList()
+  if (id === selectedId) renderSteps()
+}
+
 function renderSteps() {
   const run = runs.get(selectedId)
   const states = stepStates(doneSteps, run)
@@ -362,14 +389,36 @@ function renderSteps() {
   $('#steps').replaceChildren(...STEPS.map((step, i) => stepRow(selectedId, step, states[i], run, idle && i === firstUndone)))
   $('#process').disabled = !idle || !doneSteps.includes('transcribe')
   $('#process').classList.toggle('loading', !idle)
-  $('#delete').disabled = !idle
+  $('#delete').disabled = !idle || Boolean(selectedMeeting()?.locked)
+  renderLock()
+}
+
+// Progress redraws the step rows many times a second; reusing one button per run keeps a click from landing on a replaced node.
+const cancelButtons = new Map()
+
+function cancelButton(id) {
+  if (cancelButtons.has(id)) return cancelButtons.get(id)
+  const cancel = el('button', { type: 'button', className: 'test-btn', textContent: 'Cancelar' })
+  cancel.onclick = () => {
+    cancel.disabled = true
+    cancel.textContent = 'Cancelando…'
+    api.cancelProcessing(id)
+  }
+  cancelButtons.set(id, cancel)
+  return cancel
+}
+
+function stepAction(id, step, state, withAction) {
+  if (state === 'running') return cancelButton(id)
+  if (!withAction) return undefined
+  return el('button', { type: 'button', className: 'test-btn', textContent: STEP_VIEWS[state].action, onclick: () => processMeeting(id, step) })
 }
 
 function stepRow(id, step, state, run, withAction) {
   const view = STEP_VIEWS[state]
   const detail = el('small', { className: view.tone, textContent: view.text(run) })
   if (state === 'error') detail.role = 'alert'
-  const action = withAction ? el('button', { type: 'button', className: 'test-btn', textContent: view.action, onclick: () => processMeeting(id, step) }) : undefined
+  const action = stepAction(id, step, state, withAction)
   return el('li', { className: 'setting' }, el('span', {}, STEP_LABELS[step], detail), action)
 }
 
@@ -879,12 +928,14 @@ $('#title').onblur = async () => {
   $('#title').textContent = titleOf(selectedMeeting())
 }
 api.onMeetingMenuAction(async (id, action) => {
+  if (action === 'toggle-lock') return toggleLock(id)
   await showMeeting(id)
   if (action === 'delete') return $('#delete').click()
   $('#title').focus()
   getSelection().selectAllChildren($('#title'))
 })
 $('#open-folder').onclick = () => api.openMeeting(selectedId)
+$('#lock').onclick = () => toggleLock(selectedId)
 $('#copy').onclick = async () => {
   await navigator.clipboard.writeText(tab === 'summary' ? summaryText : transcriptText)
   $('#meeting-status').textContent = tab === 'summary' ? 'Resumo copiado' : 'Transcrição copiada'

@@ -107,6 +107,9 @@
       .detail-head p { margin-top: 2px; font-size: 12px; }
       .icon-btn { width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); display: flex; align-items: center; justify-content: center; }
       .icon-btn:hover { background: var(--hover); color: var(--text); }
+      #lock[aria-pressed="true"] { color: var(--accent); }
+      #lock[aria-pressed="true"] .lock-open, #lock[aria-pressed="false"] .lock-closed { display: none; }
+      .row-lock { flex-shrink: 0; margin-left: 4px; vertical-align: -2px; color: var(--muted); }
       .status-line { flex-shrink: 0; margin: 0 20px 10px; font-size: 12px; color: var(--muted); }
       .status-line:empty { display: none; }
       .steps { flex-shrink: 0; margin: 0 20px 12px; padding: 0; list-style: none; }
@@ -238,6 +241,10 @@
               </button>
               <button id="open-folder" class="icon-btn" aria-label="Abrir pasta" title="Abrir pasta">
                 <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"></path></svg>
+              </button>
+              <button id="lock" class="icon-btn" aria-pressed="false" aria-label="Proteger contra exclusão" title="Proteger contra exclusão">
+                <svg class="lock-closed" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+                <svg class="lock-open" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 7.8-1.2"></path></svg>
               </button>
               <button id="delete" class="icon-btn" aria-label="Excluir reunião" title="Excluir reunião">
                 <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"></path></svg>

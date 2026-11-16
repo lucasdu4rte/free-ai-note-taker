@@ -14,6 +14,7 @@ export const FILES = {
   transcript: 'transcricao.md',
   summary: 'resumo.md',
   title: 'titulo.txt',
+  lock: 'protegida.txt',
 }
 
 const SAMPLE_AUDIO = path.join(import.meta.dirname, 'sample.wav')
@@ -24,14 +25,15 @@ export const completedSteps = (dir) => STEPS.filter((step) => fs.existsSync(path
 
 // Starting at `from` reuses the earlier outputs, so retrying a failed LLM step (e.g. a free-tier quota) never redoes the transcription.
 // transcribeAudio is swappable so the app can run it in a separate process (see main.js transcribeInWorker).
-export async function processMeeting(dir, settings, modelsDir, onProgress = () => {}, from = STEPS[0], transcribeAudio = transcribe) {
+// A step's file is written only when the step finishes, so cancelling (signal) keeps every earlier step and the next run resumes there.
+export async function processMeeting(dir, settings, modelsDir, onProgress = () => {}, from = STEPS[0], transcribeAudio = transcribe, signal = undefined) {
   if (!STEPS.includes(from)) throw new Error(`Etapa inválida: ${from}`)
   const file = (name) => path.join(dir, name)
   const read = (step) => fs.readFileSync(file(STEP_OUTPUTS[step]), 'utf8')
-  const complete = completeWithFallback([settings.llm, ...settings.llmFallbacks])
+  const complete = completeWithFallback([settings.llm, ...settings.llmFallbacks].map((config) => ({ ...config, signal })))
   const run = {
     transcribe: async (report) => {
-      const raw = await transcribeAudio(file(FILES.audio), settings.transcription, modelsDir, report)
+      const raw = await transcribeAudio(file(FILES.audio), settings.transcription, modelsDir, report, signal)
       if (!raw) throw new Error('Nenhuma fala foi detectada no áudio.')
       return raw
     },
@@ -39,8 +41,11 @@ export async function processMeeting(dir, settings, modelsDir, onProgress = () =
     summarize: (report) => summarize(read('clean'), complete, report),
   }
   for (const step of STEPS.slice(STEPS.indexOf(from))) {
+    signal?.throwIfAborted()
     onProgress(step)
-    fs.writeFileSync(file(STEP_OUTPUTS[step]), await run[step]((detail) => onProgress(step, detail)))
+    const output = await run[step]((detail) => onProgress(step, detail))
+    signal?.throwIfAborted()
+    fs.writeFileSync(file(STEP_OUTPUTS[step]), output)
   }
 }
 

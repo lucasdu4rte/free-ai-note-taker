@@ -65,6 +65,7 @@ export function completeWithFallback(configs) {
       try {
         return await complete(withRequestLimits(config, isLast), system, text)
       } catch (error) {
+        if (config.signal?.aborted) throw error
         failures.push(`${config.model}: ${error.message}`)
         if (isLast) throw new Error(failures.join(' · '))
       }
@@ -113,12 +114,15 @@ export async function chat(config, messages) {
 }
 
 // Free tiers (Gemini, Groq) answer 429 often, so rate limits and server errors are retried with backoff.
-export async function postJson(url, apiKey, body, { retries = MAX_RETRIES, timeoutMs } = {}) {
+// signal is the user's cancel; it stops the request and any wait between retries right away.
+export async function postJson(url, apiKey, body, { retries = MAX_RETRIES, timeoutMs, signal } = {}) {
   const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
   if (typeof body === 'string') headers['Content-Type'] = 'application/json'
-  const signal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined
-  const res = await fetch(url, { method: 'POST', headers, body, signal }).catch((error) => {
-    if (!signal?.aborted) throw error
+  const timeout = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined
+  const abort = AbortSignal.any([timeout, signal].filter(Boolean))
+  const res = await fetch(url, { method: 'POST', headers, body, signal: abort }).catch((error) => {
+    signal?.throwIfAborted()
+    if (!timeout?.aborted) throw error
     throw new Error(`${new URL(url).host} não respondeu em ${timeoutMs / 1000} s.`)
   })
   const data = await res.json().catch(() => null)
@@ -128,9 +132,19 @@ export async function postJson(url, apiKey, body, { retries = MAX_RETRIES, timeo
   if (retryable && retries > 0) {
     const attempt = MAX_RETRIES - retries + 1
     const retryAfterSeconds = Number(res.headers.get('retry-after')) || 10 * attempt
-    await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000))
-    return postJson(url, apiKey, body, { retries: retries - 1, timeoutMs })
+    await sleep(retryAfterSeconds * 1000, signal)
+    return postJson(url, apiKey, body, { retries: retries - 1, timeoutMs, signal })
   }
   const detail = data?.error?.message ?? data?.[0]?.error?.message ?? JSON.stringify(data)
   throw new Error(`${new URL(url).host} respondeu HTTP ${res.status}: ${detail}`)
+}
+
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer)
+      reject(signal.reason)
+    }, { once: true })
+  })
 }
