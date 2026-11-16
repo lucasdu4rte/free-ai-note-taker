@@ -1,18 +1,23 @@
 const { overlay } = window.api
 const $ = (id) => document.getElementById(id)
 const BARS = 20
-const levels = new Array(BARS).fill(0)
-const bars = levels.map(() => document.createElement('span'))
+const BALL_BARS = 4
+const bars = Array.from({ length: BARS }, () => document.createElement('span'))
+const ballBars = Array.from({ length: BALL_BARS }, () => document.createElement('span'))
 const PARTS = ['chips', 'badge', 'wave', 'sources', 'timer', 'stop']
+let smoothedLevel = 0
 let state = { phase: 'hidden' }
 let clock
 
 $('wave').append(...bars)
+$('eq').append(...ballBars)
 
 const VIEWS = {
   recording(current) {
-    renderCollapsed(current.collapsed)
-    if (current.collapsed) return show('badge')
+    const collapsed = Boolean(current.collapsed)
+    $('bar').hidden = collapsed
+    $('ball-wrap').hidden = !collapsed
+    if (collapsed) return show()
     show('chips', 'badge', 'wave', 'sources', 'timer', 'stop')
     $('chip-llm').textContent = `Resumo by ${current.llm}`
     const label = current.micMuted ? 'Desmutar microfone' : 'Mutar microfone'
@@ -27,15 +32,10 @@ const VIEWS = {
     tick()
     clock = setInterval(tick, 1000)
   },
-  hidden() {},
-}
-
-function renderCollapsed(collapsed) {
-  const label = collapsed ? 'Expandir a barra de gravação' : 'Minimizar a barra'
-  $('bar').classList.toggle('collapsed', Boolean(collapsed))
-  $('logo').setAttribute('aria-expanded', String(!collapsed))
-  $('logo').setAttribute('aria-label', label)
-  $('logo').title = label
+  hidden() {
+    $('bar').hidden = false
+    $('ball-wrap').hidden = true
+  },
 }
 
 function show(...parts) {
@@ -51,14 +51,18 @@ function render(next) {
 overlay.onState(render)
 const applyOpacity = (percent) => document.documentElement.style.setProperty('--opacity', percent / 100)
 overlay.onOpacity(applyOpacity)
+// Mirrored equalizer: bars rise from the center, with a little jitter so steady speech still looks alive.
+const jitter = () => 0.7 + 0.3 * Math.random()
+const centerWeight = (index) => 1 - Math.abs(index - (BARS - 1) / 2) / (BARS / 2)
 overlay.onLevel((level) => {
-  levels.push(level)
-  levels.shift()
-  bars.forEach((bar, i) => (bar.style.height = `${3 + Math.round(levels[i] * 21)}px`))
+  smoothedLevel += (level - smoothedLevel) * 0.5
+  bars.forEach((bar, i) => (bar.style.height = `${3 + Math.round(smoothedLevel * 21 * (0.35 + 0.65 * centerWeight(i)) * jitter())}px`))
+  ballBars.forEach((bar, i) => (bar.style.height = `${4 + Math.round(smoothedLevel * 18 * (i % 3 ? 1 : 0.7) * jitter())}px`))
 })
 
 $('stop').onclick = () => overlay.stop()
-$('logo').onclick = () => overlay.setCollapsed(!state.collapsed)
+$('minimize').onclick = () => overlay.setCollapsed(true)
+$('ball').onclick = () => overlay.setCollapsed(false)
 $('mic').onclick = () => overlay.toggleMic()
 $('chip-llm').onclick = () => overlay.openSettings()
 

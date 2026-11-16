@@ -17,7 +17,7 @@ const MEETING_ID = /^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/
 // Ctrl+Shift+R would steal the browsers' hard-reload shortcut system-wide.
 const DEFAULT_SHORTCUT = 'CommandOrControl+Alt+R'
 const OVERLAY_SIZE = { width: 640, height: 112, bottomMargin: 24 }
-const COLLAPSED_OVERLAY_SIZE = { width: 96, height: 64 }
+const COLLAPSED_OVERLAY_SIZE = { width: 64, height: 64 }
 const MAX_TITLE_LENGTH = 120
 const MIN_RECORDING_SECONDS = 3
 const MODELS_TIMEOUT_MS = 3000

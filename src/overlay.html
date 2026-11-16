@@ -20,21 +20,25 @@
       .logo::before, .logo::after { content: ''; position: absolute; top: 4px; bottom: 4px; width: 4px; border: 1.5px solid currentColor; }
       .logo::before { left: 0; border-right: 0; }
       .logo::after { right: 0; border-left: 0; }
-      .logo:hover { background: rgba(255, 255, 255, 0.1); }
-      .bar.collapsed { width: auto; padding: 8px; gap: 0; }
+      .ball-wrap { -webkit-app-region: drag; padding: 4px; border-radius: 50%; }
+      .ball { position: relative; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; padding: 0; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(12, 12, 13, var(--opacity)); color: #f2f2f2; }
+      .ball:hover { border-color: rgba(255, 255, 255, 0.3); }
+      .ball .badge { position: absolute; top: 3px; right: 3px; width: 9px; height: 9px; box-sizing: border-box; border: 2px solid #0c0c0d; }
+      .eq { display: flex; align-items: center; gap: 3px; height: 22px; }
+      .eq span { display: block; width: 4px; height: 4px; border-radius: 2px; background: #f2f2f2; transition: height 50ms linear; }
       .badge { width: 7px; height: 7px; border-radius: 50%; background: #ff5a52; animation: rec-pulse 1.4s ease-out infinite; }
       .wave { display: flex; align-items: center; gap: 2px; height: 24px; }
       .wave span { display: block; width: 3px; height: 3px; border-radius: 2px; background: #f2f2f2; transition: height 50ms linear; }
       .sources { flex-grow: 1; display: flex; align-items: center; gap: 12px; color: #a3a3a8; }
-      .mic { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; background: rgba(255, 255, 255, 0.06); color: #f2f2f2; }
-      .mic:hover { background: rgba(255, 255, 255, 0.12); }
+      .mic, .tool { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; background: rgba(255, 255, 255, 0.06); color: #f2f2f2; }
+      .mic:hover, .tool:hover { background: rgba(255, 255, 255, 0.12); }
       .mic[aria-pressed="true"] { background: #3a1716; border-color: #ff5a52; color: #ff5a52; }
       .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
       .action { min-height: 34px; padding: 0 14px; border: 0; border-radius: 10px; background: #f2f2f2; color: #0c0c0d; font-weight: 600; }
       .action.stop { display: flex; align-items: center; gap: 8px; }
       .stop-icon { width: 8px; height: 8px; border-radius: 2px; background: currentColor; }
       @keyframes rec-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 90, 82, 0.7); } 100% { box-shadow: 0 0 0 6px rgba(255, 90, 82, 0); } }
-      @media (prefers-reduced-motion: reduce) { .badge { animation: none; } .wave span { transition: none; } }
+      @media (prefers-reduced-motion: reduce) { .badge { animation: none; } .wave span, .eq span { transition: none; } }
     </style>
   </head>
   <body>
@@ -43,9 +47,7 @@
         <button id="chip-llm" class="chip" title="Abrir as configurações"></button>
       </div>
       <div id="bar" class="bar" role="group" aria-label="Gravação da reunião">
-        <button id="logo" class="logo" aria-expanded="true" aria-label="Minimizar a barra" title="Minimizar a barra">
-          <span id="badge" class="badge" aria-hidden="true" hidden></span><span aria-hidden="true">REC</span>
-        </button>
+        <span class="logo" role="img" aria-label="Gravando"><span id="badge" class="badge" aria-hidden="true" hidden></span><span aria-hidden="true">REC</span></span>
         <span id="wave" class="wave" aria-hidden="true" hidden></span>
         <div id="sources" class="sources">
           <button id="mic" class="mic" aria-pressed="false" aria-label="Mutar microfone" title="Mutar microfone">
@@ -55,7 +57,14 @@
           <svg id="speaker" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Som do PC sendo gravado" hidden><title>Som do PC sendo gravado</title><path d="M11 5 6 9H2v6h4l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M19 5a10 10 0 0 1 0 14"></path></svg>
         </div>
         <span id="timer" class="timer" role="timer" aria-label="Tempo de gravação" hidden></span>
+        <button id="minimize" class="tool" aria-label="Minimizar a barra" title="Minimizar a barra"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"></path></svg></button>
         <button id="stop" class="action stop" hidden><span class="stop-icon" aria-hidden="true"></span>Parar</button>
+      </div>
+      <div id="ball-wrap" class="ball-wrap" hidden>
+        <button id="ball" class="ball" aria-label="Expandir a barra de gravação" title="Expandir a barra de gravação">
+          <span id="eq" class="eq" aria-hidden="true"></span>
+          <span class="badge" aria-hidden="true"></span>
+        </button>
       </div>
     </div>
     <script type="module" src="overlay.js"></script>
