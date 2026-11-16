@@ -54,7 +54,8 @@ contextBridge.exposeInMainWorld('api', {
     stop: () => ipcRenderer.send('overlay:stop'),
     toggleMic: () => ipcRenderer.send('overlay:toggle-mic'),
     setCollapsed: (collapsed) => ipcRenderer.send('overlay:collapse', collapsed),
-    moveBy: (dx, dy) => ipcRenderer.send('overlay:move-by', dx, dy),
+    startDrag: () => ipcRenderer.send('overlay:drag-start'),
+    endDrag: () => ipcRenderer.invoke('overlay:drag-end'),
     openSettings: () => ipcRenderer.send('overlay:open-settings'),
   },
 })

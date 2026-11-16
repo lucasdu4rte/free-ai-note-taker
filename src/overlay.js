@@ -64,7 +64,6 @@ overlay.onLevel((level) => {
 
 $('stop').onclick = () => overlay.stop()
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
-const DRAG_THRESHOLD_PX = 4
 
 function leaveThen(element, done) {
   if (reducedMotion.matches) return done()
@@ -75,29 +74,22 @@ function leaveThen(element, done) {
 
 $('minimize').onclick = () => leaveThen($('bar'), () => overlay.setCollapsed(true))
 
-// The ball is both a button and a handle: a press that moves past the threshold drags the window, a still one expands.
-const CLICK_AFTER_DRAG_MS = 300
-let drag
-let dragEndedAt = 0
+// The ball is both a button and a handle. The main process moves the window from the real cursor position:
+// moving it from this page's pointer events fed back on itself, since every move shifted the pointer under the page.
 $('ball').onpointerdown = (event) => {
-  drag = { x: event.screenX, y: event.screenY, moved: false }
   $('ball').setPointerCapture(event.pointerId)
+  overlay.startDrag()
 }
-$('ball').onpointermove = (event) => {
-  if (!drag) return
-  const dx = event.screenX - drag.x
-  const dy = event.screenY - drag.y
-  if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return
-  drag = { x: event.screenX, y: event.screenY, moved: true }
-  overlay.moveBy(dx, dy)
+const endDrag = async () => {
+  const { moved } = await overlay.endDrag()
+  if (!moved) leaveThen($('ball'), () => overlay.setCollapsed(false))
 }
-$('ball').onpointerup = () => {
-  if (drag?.moved) dragEndedAt = performance.now()
-  drag = undefined
-}
-$('ball').onclick = () => {
-  if (performance.now() - dragEndedAt < CLICK_AFTER_DRAG_MS) return
-  leaveThen($('ball'), () => overlay.setCollapsed(false))
+$('ball').onpointerup = endDrag
+$('ball').onpointercancel = () => overlay.endDrag()
+$('ball').onlostpointercapture = () => overlay.endDrag()
+// Mouse clicks are handled on pointerup; this covers Enter and Space, which click without a pointer (detail 0).
+$('ball').onclick = (event) => {
+  if (event.detail === 0) leaveThen($('ball'), () => overlay.setCollapsed(false))
 }
 $('mic').onclick = () => overlay.toggleMic()
 $('chip-llm').onclick = () => overlay.openSettings()

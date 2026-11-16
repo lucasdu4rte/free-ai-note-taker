@@ -18,6 +18,8 @@ const MEETING_ID = /^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/
 const DEFAULT_SHORTCUT = 'CommandOrControl+Alt+R'
 const OVERLAY_SIZE = { width: 640, height: 112, bottomMargin: 24 }
 const COLLAPSED_OVERLAY_SIZE = { width: 48, height: 48 }
+const DRAG_THRESHOLD_PX = 4
+const DRAG_POLL_MS = 16
 const MAX_TITLE_LENGTH = 120
 const MIN_RECORDING_SECONDS = 3
 const MODELS_TIMEOUT_MS = 3000
@@ -99,6 +101,8 @@ function createOverlay() {
   })
   window.setAlwaysOnTop(true, 'screen-saver')
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  // If the mouse-up of a drag never reaches the ball (another window on top got it), the next click elsewhere ends the drag.
+  window.on('blur', () => stopOverlayDrag())
   window.loadFile(path.join(import.meta.dirname, 'overlay.html'))
   return window
 }
@@ -125,6 +129,7 @@ function showOverlay(state) {
 }
 
 function hideOverlay() {
+  stopOverlayDrag()
   overlayState = { phase: 'hidden' }
   // A hidden window keeps running, so the recording view's timer has to be told to stop.
   overlay.webContents.send('overlay:state', overlayState)
@@ -269,11 +274,31 @@ ipcMain.on('overlay:toggle-mic', () => {
   win.webContents.send('recording:mic-muted', micMuted)
   showOverlay({ ...overlayState, micMuted })
 })
-ipcMain.on('overlay:move-by', (_event, dx, dy) => {
-  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return
+let overlayDrag = null
+
+function stopOverlayDrag() {
+  if (!overlayDrag) return { moved: false }
+  clearInterval(overlayDrag.timer)
+  const { moved } = overlayDrag
+  overlayDrag = null
+  return { moved }
+}
+
+ipcMain.on('overlay:drag-start', () => {
+  stopOverlayDrag()
+  const cursor = screen.getCursorScreenPoint()
   const [x, y] = overlay.getPosition()
-  overlay.setPosition(Math.round(x + dx), Math.round(y + dy))
+  overlayDrag = { cursor, x, y, moved: false }
+  overlayDrag.timer = setInterval(() => {
+    const now = screen.getCursorScreenPoint()
+    const dx = now.x - overlayDrag.cursor.x
+    const dy = now.y - overlayDrag.cursor.y
+    if (!overlayDrag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return
+    overlayDrag.moved = true
+    overlay.setPosition(overlayDrag.x + dx, overlayDrag.y + dy)
+  }, DRAG_POLL_MS)
 })
+ipcMain.handle('overlay:drag-end', stopOverlayDrag)
 ipcMain.on('overlay:collapse', (_event, collapsed) => {
   if (overlayState.phase !== 'recording' || typeof collapsed !== 'boolean') return
   overlayCollapsed = collapsed
@@ -465,4 +490,5 @@ ipcMain.handle('mcp:set', async (_event, enabled, port) => {
   return mcpStatus()
 })
 
-app.on('will-quit', () => globalShortcut.unregisterAll())
+// A second copy quits before it is ready, and globalShortcut throws if touched then.
+app.on('will-quit', () => app.isReady() && globalShortcut.unregisterAll())
