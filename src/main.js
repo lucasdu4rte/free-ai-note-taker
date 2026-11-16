@@ -327,14 +327,18 @@ ipcMain.on('overlay:drag-start', () => {
     const dy = now.y - overlayDrag.cursor.y
     if (!overlayDrag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return
     overlayDrag.moved = true
-    // Windows display scaling gives fractional cursor points, and setPosition throws on anything but integers.
     const { workArea } = screen.getDisplayNearestPoint(now)
-    const [width, height] = overlay.getSize()
+    const { width, height } = overlayCollapsed ? COLLAPSED_OVERLAY_SIZE : OVERLAY_SIZE
+    // Windows display scaling gives fractional cursor points, and setBounds throws on anything but integers.
     const clamp = (value, min, max) => Math.round(Math.min(Math.max(value, min), max))
-    overlay.setPosition(
-      clamp(overlayDrag.x + dx, workArea.x, workArea.x + workArea.width - width),
-      clamp(overlayDrag.y + dy, workArea.y, workArea.y + workArea.height - height),
-    )
+    const x = clamp(overlayDrag.x + dx, workArea.x, workArea.x + workArea.width - width)
+    const y = clamp(overlayDrag.y + dy, workArea.y, workArea.y + workArea.height - height)
+    if (x === overlayDrag.lastX && y === overlayDrag.lastY) return
+    overlayDrag.lastX = x
+    overlayDrag.lastY = y
+    // With display scaling, Windows grows the window a pixel on every setPosition, which slid the ball away from a still
+    // cursor. setBounds with the fixed size, only when the cursor moved, keeps it in place.
+    overlay.setBounds({ x, y, width, height })
   }, DRAG_POLL_MS)
 })
 ipcMain.handle('overlay:drag-end', stopOverlayDrag)
