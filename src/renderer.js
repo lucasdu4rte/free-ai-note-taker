@@ -806,6 +806,15 @@ function showSaveState(text, failed = false) {
   if (!failed) saveStateTimer = setTimeout(() => (badge.hidden = true), SAVED_BADGE_MS)
 }
 
+async function confirmSaved(write) {
+  try {
+    await write
+    showSaveState('Salvo')
+  } catch (error) {
+    showSaveState(`Não foi possível salvar: ${errorText(error)}`, true)
+  }
+}
+
 function saveSoon() {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(saveForm, SAVE_DELAY_MS)
@@ -1002,11 +1011,13 @@ $('#check-update').onclick = () =>
       result.className = 'error'
     }
   })
-$('#theme').onchange = () => api.setTheme($('#theme').value)
+$('#theme').onchange = () => confirmSaved(api.setTheme($('#theme').value))
 $('#mic-device').onchange = () => {
   try {
     localStorage.setItem(MIC_STORAGE_KEY, $('#mic-device').value)
+    showSaveState('Salvo')
   } catch (error) {
+    showSaveState('Não foi possível salvar o microfone', true)
     console.error('Could not remember the microphone:', error)
   }
 }
@@ -1017,7 +1028,7 @@ $('#overlay-opacity').oninput = (event) => {
   event.stopPropagation()
   const percent = Number($('#overlay-opacity').value)
   renderOverlayOpacity(percent)
-  api.setOverlayOpacity(percent)
+  confirmSaved(api.setOverlayOpacity(percent))
 }
 
 function mcpStatusLine({ running, error, port }) {
@@ -1042,7 +1053,9 @@ function renderMcp(status) {
 
 async function saveMcp() {
   try {
-    renderMcp(await api.setMcp($('#mcp-enabled').checked, Number($('#mcp-port').value)))
+    const status = await api.setMcp($('#mcp-enabled').checked, Number($('#mcp-port').value))
+    renderMcp(status)
+    if (!status.error) showSaveState('Salvo')
   } catch (error) {
     $('#mcp-result').textContent = `✗ ${errorText(error)}`
     $('#mcp-result').className = 'error'
@@ -1163,6 +1176,7 @@ async function changeShortcut() {
   button.textContent = 'Alterar'
   const { label, taken } = await api.setShortcut(accelerator)
   renderShortcut(label, taken ? 'Essa combinação já é usada por outro app. Tente outra.' : undefined)
+  if (accelerator && label && !taken) showSaveState('Salvo')
 }
 
 $('#change-shortcut').onclick = changeShortcut
