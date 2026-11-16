@@ -293,9 +293,9 @@ ipcMain.handle('llm:models', async (_event, baseURL) => {
   const { data } = await response.json()
   return data.map((model) => model.id).sort()
 })
-ipcMain.handle('settings:test', (event, section, config) => {
+ipcMain.handle('settings:test', (event, section, config, samples) => {
   if (section === 'llm') return testLlm(config)
-  return testTranscription(config, modelsDir(), (status) => event.sender.send('settings:test-status', section, status), transcribeInWorker)
+  return testTranscription(config, modelsDir(), (status) => event.sender.send('settings:test-status', section, status), transcribeInWorker, samples)
 })
 
 ipcMain.handle('overlay:get-state', () => overlayState)

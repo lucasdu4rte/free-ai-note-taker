@@ -263,7 +263,7 @@ test('a failing service hands the rest of the meeting to the reserve', async () 
   assert.equal(await cleanTranscript(twoBlocks, complete, (status) => statuses.push(status)), 'ok\nok')
 
   assert.equal(primaryCalls, 1)
-  assert.deepEqual(statuses, ['Revisando o texto 1/2 · principal', 'Revisando o texto 1/2 · reserva (reserva)', 'Revisando o texto 2/2 · reserva (reserva)'])
+  assert.deepEqual(statuses, ['Revisando o texto 1/2 · principal', 'Revisando o texto 1/2 · reserva (fallback)', 'Revisando o texto 2/2 · reserva (fallback)'])
   primary.close()
   reserve.close()
 })

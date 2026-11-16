@@ -137,8 +137,10 @@
       .settings-body { align-self: flex-start; width: 100%; max-width: 720px; padding: 20px 28px 40px; display: flex; flex-direction: column; gap: 18px; }
       .settings-body h1 { font-size: 18px; line-height: 24px; font-weight: 600; }
       .settings-head { display: flex; align-items: center; gap: 10px; }
-      .save-state { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+      .save-state { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 50; box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); animation: toast-in 0.18s ease-out; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
       .save-state::before { content: '✓'; }
+      @keyframes toast-in { from { opacity: 0; translate: 0 8px; } }
+      @media (prefers-reduced-motion: reduce) { .save-state { animation: none; } }
       .save-state.error { color: var(--rec); background: color-mix(in srgb, var(--rec) 14%, transparent); }
       .save-state.error::before { content: '!'; }
       .settings-body section { display: flex; flex-direction: column; gap: 6px; }
@@ -279,15 +281,15 @@
               <label class="setting cloud"><span>Chave de API</span><span class="secret"><input type="password" name="apiKey" autocomplete="off" spellcheck="false" /><button type="button" class="reveal" data-action="reveal" aria-label="Mostrar chave" aria-pressed="false" title="Mostrar chave"><svg class="eye" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg><svg class="eye-off" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.2 3.2"></path><path d="M6.6 6.6C3.9 8.3 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path><path d="m2 2 20 20"></path></svg></button></span></label>
               <label class="setting cloud"><span>Modelo</span><input name="model" /></label>
               <label class="setting cloud"><span>URL base</span><input name="baseURL" /></label>
-              <div class="setting"><span>Testar<small class="test-result">Transcreve um áudio curto de exemplo com o serviço escolhido</small></span><button type="button" class="test-btn" data-action="test">Testar</button></div>
+              <div class="setting"><span>Testar<small class="test-result">Grava 5 s do seu microfone e transcreve com o provider escolhido</small></span><button type="button" class="test-btn" data-action="test">Testar</button></div>
             </div>
             <input type="hidden" name="mode" />
           </section>
           <section>
             <h2>Revisão e resumo</h2>
             <div id="llm-groups" class="groups"></div>
-            <button type="button" id="add-llm" class="add-btn">+ Adicionar reserva</button>
-            <p class="hint">Se a IA principal falhar (fora do ar, limite de uso ou sem resposta no tempo limite), a reserva seguinte assume o resto da reunião.</p>
+            <button type="button" id="add-llm" class="add-btn">+ Adicionar fallback</button>
+            <p class="hint">Se a IA principal falhar (fora do ar, limite de uso ou sem resposta no tempo limite), o fallback seguinte assume o resto da reunião.</p>
           </section>
           <section>
             <h2>Gravação</h2>
@@ -308,6 +310,7 @@
             <h2>Conectar MCP</h2>
             <div class="group">
               <label class="setting"><span>Ligar servidor MCP<small id="mcp-result" role="status"></small></span><input type="checkbox" id="mcp-enabled" class="switch" role="switch" /></label>
+              <div class="setting mcp-option"><span>Reiniciar servidor<small>Use se um app de IA parou de ver as reuniões</small></span><button type="button" id="mcp-restart" class="test-btn">Reiniciar</button></div>
               <label class="setting mcp-option"><span>Porta<small>A padrão é 47615. Troque se outro programa já usa essa</small></span><input type="number" id="mcp-port" class="port" min="1024" max="65535" /></label>
               <div class="setting command-row mcp-option"><span>Endereço<small>Para qualquer app que aceite MCP por HTTP</small></span><button type="button" class="test-btn" data-copy="mcp-url">Copiar</button><code id="mcp-url"></code></div>
             </div>
@@ -327,7 +330,7 @@
         </form>
         <template id="llm-template">
           <div class="group" role="group" data-section="llm">
-            <div class="setting"><span class="llm-title"></span><button type="button" class="icon-btn" data-action="remove" aria-label="Remover reserva" title="Remover reserva"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+            <div class="setting"><span class="llm-title"></span><button type="button" class="icon-btn" data-action="remove" aria-label="Remover fallback" title="Remover fallback"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
             <div class="setting"><span>Provider</span><select name="provider"></select></div>
             <label class="setting"><span>Chave de API<small>Não precisa para o Ollama</small></span><span class="secret"><input type="password" name="apiKey" autocomplete="off" spellcheck="false" /><button type="button" class="reveal" data-action="reveal" aria-label="Mostrar chave" aria-pressed="false" title="Mostrar chave"><svg class="eye" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg><svg class="eye-off" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.2 3.2"></path><path d="M6.6 6.6C3.9 8.3 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path><path d="m2 2 20 20"></path></svg></button></span></label>
             <div class="setting"><span>Modelo<small class="model-hint" hidden></small></span><input name="model" aria-label="Modelo" /><select class="model-picker" aria-label="Modelo do Ollama"></select></div>

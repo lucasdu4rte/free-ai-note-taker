@@ -5,7 +5,7 @@ import sherpa from 'sherpa-onnx-node'
 import { LOCAL_ASR_MODELS, VAD_MODEL, ensureModels } from './models.js'
 import { speechSegments, transcribeCloud, transcribeLocal } from './transcribe.js'
 import { cleanTranscript, completeWithFallback, summarize, withTestLimits } from './llm.js'
-import { repairWavHeader } from './wav.js'
+import { encodeWav, repairWavHeader } from './wav.js'
 import { STEPS } from './notes.js'
 
 export const FILES = {
@@ -49,14 +49,15 @@ export async function processMeeting(dir, settings, modelsDir, onProgress = () =
   }
 }
 
-export async function testTranscription(config, modelsDir, onStatus = () => {}, transcribeAudio = transcribe) {
+// samples is the user's own voice from the mic; without it the packaged sample is used.
+export async function testTranscription(config, modelsDir, onStatus = () => {}, transcribeAudio = transcribe, samples = undefined) {
   // The packaged sample sits inside app.asar, which sherpa-onnx's native file reader cannot open.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'note-taker-test-'))
   const audioPath = path.join(dir, FILES.audio)
-  fs.writeFileSync(audioPath, fs.readFileSync(SAMPLE_AUDIO))
+  fs.writeFileSync(audioPath, samples instanceof Float32Array ? encodeWav(samples) : fs.readFileSync(SAMPLE_AUDIO))
   try {
     const transcript = await transcribeAudio(audioPath, withTestLimits(config), modelsDir, onStatus)
-    if (!transcript) throw new Error('Nenhuma fala foi reconhecida no áudio de teste.')
+    if (!transcript) throw new Error('Nenhuma fala foi reconhecida. Fale mais perto do microfone e teste de novo.')
     return transcript.replace(/^\[[\d:]+\] /gm, '')
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })

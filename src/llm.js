@@ -61,7 +61,7 @@ export function completeWithFallback(configs) {
     for (; active < configs.length; active++) {
       const config = configs[active]
       const isLast = active === configs.length - 1
-      onStatus(`${label} · ${config.model}${active ? ' (reserva)' : ''}`)
+      onStatus(`${label} · ${config.model}${active ? ' (fallback)' : ''}`)
       try {
         return await complete(withRequestLimits(config, isLast), system, text)
       } catch (error) {

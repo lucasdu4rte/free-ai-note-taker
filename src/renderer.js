@@ -39,6 +39,7 @@ const captureSystemAudio = api.platform === 'win32'
 const SHORT_RECORDING_NOTICE_MS = 4000
 const DEVICE_SETTLE_MS = 800
 const MIC_STORAGE_KEY = 'micDeviceId'
+const MIC_TEST_SECONDS = 5
 
 async function withLoading(button, task) {
   button.disabled = true
@@ -92,12 +93,15 @@ async function startRecording(attempt) {
   return { id, context, streams, sources, recorder, micMuted: false }
 }
 
-// The mic comes first: muting disables streams[0].
-async function captureAudio() {
+function micConstraints() {
   const micId = chosenMic()
   // ideal, not exact: an unplugged mic falls back to the system default instead of failing the recording.
-  const mic = { deviceId: micId ? { ideal: micId } : undefined, echoCancellation: true, noiseSuppression: true }
-  const streams = [await navigator.mediaDevices.getUserMedia({ audio: mic })]
+  return { deviceId: micId ? { ideal: micId } : undefined, echoCancellation: true, noiseSuppression: true }
+}
+
+// The mic comes first: muting disables streams[0].
+async function captureAudio() {
+  const streams = [await navigator.mediaDevices.getUserMedia({ audio: micConstraints() })]
   if (!captureSystemAudio) return streams
   try {
     const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
@@ -141,6 +145,29 @@ async function followDefaultAudioDevices() {
   current.streams = streams
   current.sources = connectSources(current.context, streams, current.recorder)
   applyMicMute(current)
+}
+
+async function recordMicSample(onSecondsLeft, isCancelled) {
+  const context = new AudioContext({ sampleRate: 16000 })
+  const streams = []
+  try {
+    await context.audioWorklet.addModule('recorder-worklet.js')
+    streams.push(await navigator.mediaDevices.getUserMedia({ audio: micConstraints() }))
+    const recorder = new AudioWorkletNode(context, 'recorder', { channelCount: 1, channelCountMode: 'explicit' })
+    connectSources(context, streams, recorder)
+    recorder.connect(context.destination)
+    const chunks = []
+    recorder.port.onmessage = ({ data }) => typeof data !== 'number' && chunks.push(data)
+    for (let left = MIC_TEST_SECONDS; left > 0 && !isCancelled(); left--) {
+      onSecondsLeft(left)
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+    }
+    const samples = new Float32Array(chunks.reduce((total, chunk) => total + chunk.length, 0))
+    chunks.reduce((offset, chunk) => (samples.set(chunk, offset), offset + chunk.length), 0)
+    return samples
+  } finally {
+    await releaseAudio(context, streams)
+  }
 }
 
 function releaseAudio(context, streams) {
@@ -538,7 +565,13 @@ function switchLlmProvider(group, provider) {
   writeLlmConfig(group, llmProfiles[provider] ?? llmFromPreset(provider))
 }
 
-const isConfigured = (config) => Boolean(config?.apiKey) || (config?.provider === 'ollama' && Boolean(config.model))
+const CONFIG_FIELDS = ['apiKey', 'baseURL', 'model', 'timeoutSeconds']
+// Picking a provider saves its untouched preset, which must not count as configured until a field changes.
+function isConfigured(config) {
+  if (!config) return false
+  const preset = llmFromPreset(config.provider)
+  return CONFIG_FIELDS.some((field) => (config[field] ?? '') !== (preset[field] ?? ''))
+}
 
 function renderConfiguredProviders(group) {
   const select = group.querySelector('[name=provider]')
@@ -730,7 +763,7 @@ async function loadOllamaModels(group) {
 }
 
 function nameLlmGroup(group, index) {
-  const title = index ? `Reserva ${index}` : 'Principal'
+  const title = index ? `Fallback ${index}` : 'Principal'
   group.ariaLabel = title
   group.querySelector('.llm-title').textContent = title
   const removeButton = group.querySelector('[data-action=remove]')
@@ -800,7 +833,10 @@ async function testGroup(group, button) {
   button.textContent = 'Cancelar'
   showTestResult(group, 'Testando…')
   try {
-    const reply = await api.testSettings(group.dataset.section, readConfig(group))
+    const samples = group.dataset.section === 'transcription' ? await recordMicSample((left) => showTestResult(group, `Fale algo agora… ${left} s`), () => group.testRun !== run) : undefined
+    if (group.testRun !== run) return
+    showTestResult(group, 'Testando…')
+    const reply = await api.testSettings(group.dataset.section, readConfig(group), samples)
     finish(`✓ Funcionou: “${reply}”`, 'ok')
   } catch (error) {
     finish(`✗ ${errorText(error)}`, 'error')
@@ -1014,6 +1050,7 @@ async function saveMcp() {
 }
 
 $('#mcp-enabled').onchange = saveMcp
+$('#mcp-restart').onclick = () => withLoading($('#mcp-restart'), saveMcp)
 $('#mcp-port').onchange = saveMcp
 document.querySelectorAll('[data-copy]').forEach((button) => {
   button.onclick = async () => {

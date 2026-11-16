@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld('api', {
   openMeeting: (id) => ipcRenderer.invoke('meeting:open', id),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
-  testSettings: (section, config) => ipcRenderer.invoke('settings:test', section, config),
+  testSettings: (section, config, samples) => ipcRenderer.invoke('settings:test', section, config, samples),
   listModels: (baseURL) => ipcRenderer.invoke('llm:models', baseURL),
   onTestStatus: on('settings:test-status'),
   onUpdateReady: on('update:ready'),

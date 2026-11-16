@@ -5,8 +5,8 @@ const OPENAI_URL = 'https://api.openai.com/v1'
 // mode 'transcriptions' = OpenAI-style /audio/transcriptions; 'chat-audio' = audio sent to /chat/completions.
 export const TRANSCRIPTION_PRESETS = {
   local: { label: 'Local: NVIDIA Parakeet v3 (grátis, offline)' },
-  groq: { label: 'Groq: Whisper (plano grátis)', baseURL: GROQ_URL, model: 'whisper-large-v3-turbo', mode: 'transcriptions' },
-  gemini: { label: 'Google Gemini (plano grátis)', baseURL: GEMINI_URL, model: 'gemini-3.8-flash', mode: 'chat-audio' },
+  groq: { label: 'Groq: Whisper', baseURL: GROQ_URL, model: 'whisper-large-v3-turbo', mode: 'transcriptions' },
+  gemini: { label: 'Google Gemini', baseURL: GEMINI_URL, model: 'gemini-3.8-flash', mode: 'chat-audio' },
   openai: { label: 'OpenAI', baseURL: OPENAI_URL, model: 'gpt-4o-mini-transcribe', mode: 'transcriptions' },
   custom: { label: 'OpenAI Compatível', baseURL: '', model: '', mode: 'transcriptions' },
 }
