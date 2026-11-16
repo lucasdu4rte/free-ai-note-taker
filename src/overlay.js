@@ -15,6 +15,8 @@ $('eq').append(...ballBars)
 const VIEWS = {
   recording(current) {
     const collapsed = Boolean(current.collapsed)
+    $('bar').classList.remove('leaving')
+    $('ball').classList.remove('leaving')
     $('bar').hidden = collapsed
     $('ball-wrap').hidden = !collapsed
     if (collapsed) return show()
@@ -61,8 +63,42 @@ overlay.onLevel((level) => {
 })
 
 $('stop').onclick = () => overlay.stop()
-$('minimize').onclick = () => overlay.setCollapsed(true)
-$('ball').onclick = () => overlay.setCollapsed(false)
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
+const DRAG_THRESHOLD_PX = 4
+
+function leaveThen(element, done) {
+  if (reducedMotion.matches) return done()
+  element.classList.add('leaving')
+  // The class stays until the next render swaps the views, so the faded-out element never flashes back.
+  element.addEventListener('animationend', done, { once: true })
+}
+
+$('minimize').onclick = () => leaveThen($('bar'), () => overlay.setCollapsed(true))
+
+// The ball is both a button and a handle: a press that moves past the threshold drags the window, a still one expands.
+const CLICK_AFTER_DRAG_MS = 300
+let drag
+let dragEndedAt = 0
+$('ball').onpointerdown = (event) => {
+  drag = { x: event.screenX, y: event.screenY, moved: false }
+  $('ball').setPointerCapture(event.pointerId)
+}
+$('ball').onpointermove = (event) => {
+  if (!drag) return
+  const dx = event.screenX - drag.x
+  const dy = event.screenY - drag.y
+  if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return
+  drag = { x: event.screenX, y: event.screenY, moved: true }
+  overlay.moveBy(dx, dy)
+}
+$('ball').onpointerup = () => {
+  if (drag?.moved) dragEndedAt = performance.now()
+  drag = undefined
+}
+$('ball').onclick = () => {
+  if (performance.now() - dragEndedAt < CLICK_AFTER_DRAG_MS) return
+  leaveThen($('ball'), () => overlay.setCollapsed(false))
+}
 $('mic').onclick = () => overlay.toggleMic()
 $('chip-llm').onclick = () => overlay.openSettings()
 

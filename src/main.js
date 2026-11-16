@@ -17,7 +17,7 @@ const MEETING_ID = /^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/
 // Ctrl+Shift+R would steal the browsers' hard-reload shortcut system-wide.
 const DEFAULT_SHORTCUT = 'CommandOrControl+Alt+R'
 const OVERLAY_SIZE = { width: 640, height: 112, bottomMargin: 24 }
-const COLLAPSED_OVERLAY_SIZE = { width: 64, height: 64 }
+const COLLAPSED_OVERLAY_SIZE = { width: 48, height: 48 }
 const MAX_TITLE_LENGTH = 120
 const MIN_RECORDING_SECONDS = 3
 const MODELS_TIMEOUT_MS = 3000
@@ -268,6 +268,11 @@ ipcMain.on('overlay:toggle-mic', () => {
   const micMuted = !overlayState.micMuted
   win.webContents.send('recording:mic-muted', micMuted)
   showOverlay({ ...overlayState, micMuted })
+})
+ipcMain.on('overlay:move-by', (_event, dx, dy) => {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return
+  const [x, y] = overlay.getPosition()
+  overlay.setPosition(Math.round(x + dx), Math.round(y + dy))
 })
 ipcMain.on('overlay:collapse', (_event, collapsed) => {
   if (overlayState.phase !== 'recording' || typeof collapsed !== 'boolean') return
