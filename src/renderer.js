@@ -794,7 +794,7 @@ async function saveForm() {
   }
   renderProviderLabels(settings)
   llmGroups().forEach(renderConfiguredProviders)
-  showSaveState('Salvo')
+  showSaveState('Alteração salva')
 }
 
 function showSaveState(text, failed = false) {
@@ -809,7 +809,7 @@ function showSaveState(text, failed = false) {
 async function confirmSaved(write) {
   try {
     await write
-    showSaveState('Salvo')
+    showSaveState('Alteração salva')
   } catch (error) {
     showSaveState(`Não foi possível salvar: ${errorText(error)}`, true)
   }
@@ -1015,7 +1015,7 @@ $('#theme').onchange = () => confirmSaved(api.setTheme($('#theme').value))
 $('#mic-device').onchange = () => {
   try {
     localStorage.setItem(MIC_STORAGE_KEY, $('#mic-device').value)
-    showSaveState('Salvo')
+    showSaveState('Alteração salva')
   } catch (error) {
     showSaveState('Não foi possível salvar o microfone', true)
     console.error('Could not remember the microphone:', error)
@@ -1055,7 +1055,7 @@ async function saveMcp() {
   try {
     const status = await api.setMcp($('#mcp-enabled').checked, Number($('#mcp-port').value))
     renderMcp(status)
-    if (!status.error) showSaveState('Salvo')
+    if (!status.error) showSaveState('Alteração salva')
   } catch (error) {
     $('#mcp-result').textContent = `✗ ${errorText(error)}`
     $('#mcp-result').className = 'error'
@@ -1176,7 +1176,7 @@ async function changeShortcut() {
   button.textContent = 'Alterar'
   const { label, taken } = await api.setShortcut(accelerator)
   renderShortcut(label, taken ? 'Essa combinação já é usada por outro app. Tente outra.' : undefined)
-  if (accelerator && label && !taken) showSaveState('Salvo')
+  if (accelerator && label && !taken) showSaveState('Alteração salva')
 }
 
 $('#change-shortcut').onclick = changeShortcut
